@@ -1,0 +1,13 @@
+[package]
+name = "stm32cubeprogrammer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+stm32cubeprogrammer-sys = { path = "../stm32cubeprogrammer-sys" }
+derive_more = { version = "1", features = ["from", "deref", "error", "display"] }
+log = "0.4.22"
+
+[dev-dependencies]
+dotenvy = "0.15"
+test-log = "0.2.16"

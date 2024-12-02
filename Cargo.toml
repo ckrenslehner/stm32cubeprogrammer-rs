@@ -1,0 +1,6 @@
+[workspace]
+resolver = "2"
+members = [
+    "stm32cubeprogrammer",
+    "stm32cubeprogrammer-sys"
+]
