@@ -1,6 +1,10 @@
-#![allow(non_snake_case, non_camel_case_types, non_upper_case_globals, unused)]
-pub mod bindings;
-pub use bindings::*;
+#![allow(non_snake_case, non_camel_case_types, non_upper_case_globals, unused, clippy::all)]
+
+#[cfg(windows)]
+include!("bindings_windows.rs");
+
+#[cfg(unix)]
+include!("bindings_unix.rs");
 
 // Re-export libloading so that the user doesn't have to depend on it
 pub use libloading;
