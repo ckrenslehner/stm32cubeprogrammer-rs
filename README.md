@@ -16,6 +16,13 @@ The bindings are generated with bindgen when running `cargo build`. The bindings
 ### Running the tests
 The tests show how to use this crate. You can generate an instance of `CubeProgrammer` via its builder. The builder requires the path to the Stm32CubeProgrammer installation directory. The path needs to be the root of the installation directory, e.g. `C:\STMicroelectronics\STM32Cube\STM32CubeProgrammer`.
 
+You need to add a `.env` file in the root to supply the necessary environment variables. Take a look at the `tests` directory for an example.
+
+A convenient way to run the tests is via `just`:
+`just test`
+
+The justfile needs `just` and `nu` to be installed.
+
 ## Status
 Working functionality:
 - Discover ST-Link probes
