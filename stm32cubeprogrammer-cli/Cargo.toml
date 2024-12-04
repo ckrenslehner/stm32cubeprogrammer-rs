@@ -1,0 +1,19 @@
+[package]
+name = "stm32cubeprogrammer-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.22", features = ["derive"] }
+clap-verbosity-flag = "3.0.1"
+env_logger = "0.11.5"
+indicatif = "0.17.9"
+indicatif-log-bridge = "0.2.3"
+stm32cubeprogrammer = { path = "../stm32cubeprogrammer" }
+dotenvy.workspace = true
+log.workspace = true
+anyhow = "1.0.94"
+
+[dev-dependencies]
+assert_cmd = "2.0.16"
+test-log.workspace = true

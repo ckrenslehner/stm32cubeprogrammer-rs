@@ -90,7 +90,7 @@ fn connect_to_target() {
         info!("Found {} ST-Link probes - Trying to connect", probes.len());
         info!("Connecting to target via probe: {}", probes[0]);
 
-        let connected_programmer = programmer.connect_to_target(probes[0].clone()).unwrap();
+        let connected_programmer = programmer.connect_to_target(&probes[0]).unwrap();
 
         let target_information = connected_programmer
             .get_general_device_information()
@@ -120,7 +120,7 @@ fn download_hex_file() {
         info!("Found {} ST-Link probes - Trying to connect", probes.len());
         info!("Connecting to target via probe: {}", probes[0]);
 
-        let connected_programmer = programmer.connect_to_target(probes[0].clone()).unwrap();
+        let connected_programmer = programmer.connect_to_target(&probes[0]).unwrap();
 
         let target_information = connected_programmer
             .get_general_device_information()
@@ -161,7 +161,7 @@ fn download_bin_file() {
         info!("Found {} ST-Link probes - Trying to connect", probes.len());
         info!("Connecting to target via probe: {}", probes[0]);
 
-        let connected_programmer = programmer.connect_to_target(probes[0].clone()).unwrap();
+        let connected_programmer = programmer.connect_to_target(&probes[0]).unwrap();
 
         let target_information = connected_programmer
             .get_general_device_information()
@@ -207,7 +207,7 @@ fn upgrade_ble_stack() {
         info!("Found {} ST-Link probes - Trying to connect", probes.len());
         info!("Connecting to target via probe: {}", probes[0]);
 
-        let connected_programmer = programmer.connect_to_target(probes[0].clone()).unwrap();
+        let connected_programmer = programmer.connect_to_target(&probes[0]).unwrap();
 
         let target_information = connected_programmer
             .get_general_device_information()
@@ -283,7 +283,7 @@ fn register_display_handler() {
         info!("Found {} ST-Link probes - Trying to connect", probes.len());
         info!("Connecting to target via probe: {}", probes[0]);
 
-        let connected_programmer = programmer.connect_to_target(probes[0].clone()).unwrap();
+        let connected_programmer = programmer.connect_to_target(&probes[0]).unwrap();
 
         let target_information = connected_programmer
             .get_general_device_information()

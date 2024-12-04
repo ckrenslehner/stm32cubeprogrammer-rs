@@ -2,5 +2,11 @@
 resolver = "2"
 members = [
     "stm32cubeprogrammer",
-    "stm32cubeprogrammer-sys"
+    "stm32cubeprogrammer-cli",
+    "stm32cubeprogrammer-sys",
 ]
+
+[workspace.dependencies]
+dotenvy = "0.15"
+log = "0.4.22"
+test-log = "0.2.16"

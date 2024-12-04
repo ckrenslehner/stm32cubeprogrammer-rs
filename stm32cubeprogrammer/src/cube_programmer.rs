@@ -94,7 +94,7 @@ impl CubeProgrammer<NotConnected> {
     /// Connect to target via ST-Link probe
     pub fn connect_to_target(
         self,
-        st_link: api_types::StLink,
+        st_link: &api_types::StLink,
     ) -> CubeProgrammerApiResult<CubeProgrammer<Connected>> {
         let connection_param = st_link.0;
         api_types::ReturnCode::from(unsafe { self.api.connectStLink(connection_param) }).check()?;
