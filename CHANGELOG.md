@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### 🚀 Features
 
 - Add support for the basic commands (including ble stack upgrade)
+- Add cli crate with download-hex command
 
 ### 🚜 Refactor
 
@@ -16,6 +17,10 @@ All notable changes to this project will be documented in this file.
 
 - Fix readme
 - Update readme
+
+### ⚙️ Miscellaneous Tasks
+
+- Add changelog
 
 ### Build
 
