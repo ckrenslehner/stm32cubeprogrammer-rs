@@ -3,6 +3,11 @@ name = "stm32cubeprogrammer-cli"
 version = "0.1.0"
 edition = "2021"
 
+authors = ["Christian Krenslehner"]
+description = "CLI for the STM32CubeProgrammer API"
+license = "MIT"
+repository = "https://github.com/ckrenslehner/stm32cubeprogrammer-rs"
+
 [dependencies]
 clap = { version = "4.5.22", features = ["derive"] }
 clap-verbosity-flag = "3.0.1"

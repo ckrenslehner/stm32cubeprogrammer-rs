@@ -25,19 +25,22 @@ The justfile needs `just` and `nu` to be installed.
 
 ## Status
 Working functionality:
-- Discover ST-Link probes
-- Connect to a target
 - Write hex/bin file to target
 - Save memory to file
 - Mass erase memory
-- Upgrade BLE stack
-- Reset
-- Get general device information
-
-Functionality to be added:
 - Enable readout protection
 - Disable readout protection
-- And much more.. PRs are more than welcome! 😊
+- Read memory
+  - As bytes, half words, words
+  - As struct (needs to implement bytemuck::Pod + bytemuck::Zeroable)
+- Firmware Update Service (only STM32WB5x/35xx)
+  - Read installed versions of FUS and BLE stack
+  - Delete BLE stack firmware
+  - Upgrade BLE stack firmware
+  
+Functionality to be added:
+- There are still many functions in `STM32CubeProgrammer_API.chm` which are not yet implemented.
+  -  PRs are more than welcome! 😊
 
 ## Platform support
 - Windows: Tested

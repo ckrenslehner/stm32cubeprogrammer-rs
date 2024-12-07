@@ -1,5 +1,8 @@
-use std::ffi::{c_char, CStr, CString};
+use core::str;
+use std::ffi::{c_char, CString};
 use std::path::Path;
+
+use crate::error::{CubeProgrammerError, CubeProgrammerResult, TypeConversionError};
 
 /// Remove the extended path prefix from a path
 fn remove_extended_path_prefix(path: &str) -> &str {
@@ -17,39 +20,68 @@ fn remove_extended_path_prefix(path: &str) -> &str {
     path
 }
 
-/// Convert a path to a CString
+/// Convert a path to cstring
 /// If the path is a extended length path, the prefix will be removed
-pub(crate) fn path_to_cstring(path: impl AsRef<Path>) -> CString {
+pub(crate) fn path_to_cstring(path: impl AsRef<Path>) -> CubeProgrammerResult<CString> {
     let path = path
         .as_ref()
         .to_str()
-        .expect("Cannot convert path to string");
+        .ok_or(CubeProgrammerError::TypeConversion {
+            message: format!("Cannot convert path `{:?}` to string", path.as_ref()),
+            source: TypeConversionError::Utf8Error,
+        })?;
 
-    CString::new(remove_extended_path_prefix(path)).expect("Cannot convert path to CString")
+    string_to_cstring(remove_extended_path_prefix(path))
 }
 
-/// Convert a path to a CString
+/// Convert a path to a wide string
 /// If the path is a extended length path, the prefix will be removed
-pub(crate) fn path_to_wide_cstring(path: impl AsRef<Path>) -> widestring::WideCString {
+pub(crate) fn path_to_widestring(
+    path: impl AsRef<Path>,
+) -> CubeProgrammerResult<widestring::WideCString> {
     let path = path
         .as_ref()
         .to_str()
-        .expect("Cannot convert path to string");
+        .ok_or(CubeProgrammerError::TypeConversion {
+            message: format!("Cannot convert path `{:?}` to string", path.as_ref()),
+            source: TypeConversionError::Utf8Error,
+        })?;
 
-    widestring::WideCString::from_str(remove_extended_path_prefix(path))
-        .expect("Cannot convert path to WideCString")
+    string_to_widestring(remove_extended_path_prefix(path))
+}
+
+/// Convert a string to a wide string
+pub(crate) fn string_to_widestring(s: &str) -> CubeProgrammerResult<widestring::WideCString> {
+    widestring::WideCString::from_str(s).map_err(|x| CubeProgrammerError::TypeConversion {
+        message: format!("Cannot convert string to widestring: {:?}", x),
+        source: TypeConversionError::NullError,
+    })
 }
 
 /// Convert a wide cstring to a string
-pub(crate) fn wide_cstring_to_string(wide_cstring: &widestring::WideCString) -> String {
-    wide_cstring
+pub(crate) fn widestring_to_string(
+    wide_string: &widestring::WideCString,
+) -> CubeProgrammerResult<String> {
+    wide_string
         .to_string()
-        .expect("Cannot convert WideCString to string")
+        .map_err(|x| CubeProgrammerError::TypeConversion {
+            message: format!("Cannot convert widestring to string: {:?}", x),
+            source: TypeConversionError::Utf16Error,
+        })
 }
 
 /// Convert a c_char slice to a null-terminated string
-pub(crate) fn cchar_to_null_terminated_string(slice: &[c_char]) -> &str {
-    let cstr =
-        CStr::from_bytes_until_nul(bytemuck::cast_slice(slice)).expect("Failed to convert CStr");
-    cstr.to_str().expect("Failed to convert CStr to str")
+pub(crate) fn c_char_slice_to_string(slice: &[c_char]) -> CubeProgrammerResult<&str> {
+    str::from_utf8(bytemuck::cast_slice(slice)).map_err(|x| CubeProgrammerError::TypeConversion {
+        message: format!("Failed to convert c_char slice to string: {:?}", x),
+        source: TypeConversionError::Utf8Error,
+    })
+}
+
+/// Convert a string to a cstring
+pub(crate) fn string_to_cstring(s: &str) -> CubeProgrammerResult<CString> {
+    CString::new(s).map_err(|x| CubeProgrammerError::TypeConversion {
+        message: format!("Failed to convert str to cstring: {:?}", x),
+        source: TypeConversionError::NullError,
+    })
 }

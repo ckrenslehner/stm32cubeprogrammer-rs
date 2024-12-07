@@ -3,6 +3,24 @@ name = "stm32cubeprogrammer"
 version = "0.1.0"
 edition = "2021"
 
+authors = ["Christian Krenslehner"]
+description = "Rust bindings for the STM32CubeProgrammer API"
+license = "MIT"
+repository = "https://github.com/ckrenslehner/stm32cubeprogrammer-rs"
+
+[package.metadata]
+# std::sync::OnceLock is available since 1.70
+msrv = "1.70.0"
+
+[features]
+default = ["validations"]
+
+# Adds support for parsing ihex files
+ihex = ["dep:ihex"]
+
+# Adds support for input validations (e.g. if a file is indeed a hex file, or it the mcu supports the FUS)
+validations = ["ihex"]
+
 [dependencies]
 stm32cubeprogrammer-sys = { path = "../stm32cubeprogrammer-sys" }
 derive_more = { version = "1", features = [
@@ -11,14 +29,17 @@ derive_more = { version = "1", features = [
     "error",
     "display",
     "into",
+    "as_ref"
 ] }
 log.workspace = true
 widestring = "1.1.0"
 num_enum = "0.7.3"
-bytemuck = "1.20.0"
+bytemuck = { version = "1.20.0", features = ["derive"] }
 strum = { version = "0.26.3", features = ["derive"] }
 lazy_static = "1.5.0"
 bon = "3.2.0"
+
+ihex = { optional = true, version = "3.0" }
 
 [dev-dependencies]
 dotenvy.workspace = true
