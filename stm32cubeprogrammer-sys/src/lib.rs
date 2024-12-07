@@ -1,4 +1,10 @@
-#![allow(non_snake_case, non_camel_case_types, non_upper_case_globals, unused, clippy::all)]
+#![allow(
+    non_snake_case,
+    non_camel_case_types,
+    non_upper_case_globals,
+    unused,
+    clippy::all
+)]
 
 #[cfg(windows)]
 include!("bindings_windows.rs");

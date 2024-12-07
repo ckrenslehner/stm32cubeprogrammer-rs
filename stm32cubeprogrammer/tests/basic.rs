@@ -1,6 +1,6 @@
 #[cfg(test)]
 use log::{debug, info, warn};
-use stm32cubeprogrammer::{CubeProgrammer, ResetMode, Verbosity};
+use stm32cubeprogrammer::{ConnectParameters, CubeProgrammer, ResetMode, Verbosity};
 
 /// Environment variable name for the path to the STM32CubeProgrammer directory
 /// Needs to be the root path of the STM32CubeProgrammer installatios
@@ -49,13 +49,12 @@ fn get_address_from_env_file(env_key: &str) -> u32 {
 
 /// Get the target directory -> Unfortunately MANIFEST_DIR does not work with cargo workspaces?
 fn get_target_dir() -> std::path::PathBuf {
-    let path = std::env::current_dir().unwrap();
-
-    debug!("Current dir: {:?}", path);
-
-    let path = path.join("..").join("target").canonicalize().unwrap();
-
-    debug!("Target dir: {:?}", path);
+    let path = std::env::current_dir()
+        .unwrap()
+        .join("..")
+        .join("target")
+        .canonicalize()
+        .unwrap();
     path
 }
 
@@ -88,9 +87,17 @@ fn connect_to_target() {
 
     if !probes.is_empty() {
         info!("Found {} ST-Link probes - Trying to connect", probes.len());
-        info!("Connecting to target via probe: {}", probes[0]);
 
-        let connected_programmer = programmer.connect_to_target(&probes[0]).unwrap();
+        let connect_parameters = ConnectParameters::builder()
+            .base_connect_parameters(&probes[0])
+            .frequency(stm32cubeprogrammer::Frequency::High)
+            .connection_mode(stm32cubeprogrammer::ConnectionMode::UnderResetMode)
+            .build()
+            .unwrap();
+
+        info!("Connecting to target via probe: {}", connect_parameters);
+
+        let connected_programmer = programmer.connect_to_target(&connect_parameters).unwrap();
 
         let target_information = connected_programmer
             .get_general_device_information()
@@ -243,9 +250,10 @@ fn upgrade_ble_stack() {
 /// This can be used in e.g. a CLI or GUI application to show the progress of the operations
 #[test_log::test]
 fn register_display_handler() {
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     /// Custom display handler
+    #[derive(Debug)]
     struct MyDisplayHandler;
 
     impl stm32cubeprogrammer::DisplayCallback for MyDisplayHandler {
@@ -273,7 +281,7 @@ fn register_display_handler() {
     let programmer = CubeProgrammer::builder()
         .cube_programmer_dir(get_path_from_env_file(ENV_CUBE_PROGRAMMER_DIR))
         .log_verbosity(Verbosity::Level2)
-        .display_callback(Arc::new(MyDisplayHandler))
+        .display_callback(Arc::new(Mutex::new(MyDisplayHandler)))
         .build()
         .unwrap();
 
@@ -299,6 +307,101 @@ fn register_display_handler() {
                 1024 * 400,
             )
             .unwrap();
+
+        connected_programmer.disconnect();
+    } else {
+        info!("No ST-Link probes found");
+    }
+}
+
+#[test_log::test]
+fn readout_protection() {
+    dotenvy::dotenv().unwrap();
+
+    let programmer = CubeProgrammer::builder()
+        .cube_programmer_dir(get_path_from_env_file(ENV_CUBE_PROGRAMMER_DIR))
+        .build()
+        .unwrap();
+
+    let probes = programmer.list_connected_st_link_probes();
+
+    if !probes.is_empty() {
+        let connect_parameters = ConnectParameters::builder()
+            .base_connect_parameters(&probes[0])
+            .frequency(stm32cubeprogrammer::Frequency::Highest)
+            .connection_mode(stm32cubeprogrammer::ConnectionMode::UnderResetMode)
+            .build()
+            .unwrap();
+
+        info!("Found {} ST-Link probes - Trying to connect", probes.len());
+        info!("Connecting to target via probe: {}", connect_parameters);
+
+        let connected_programmer = programmer.connect_to_target(&connect_parameters).unwrap();
+
+        let target_information = connected_programmer
+            .get_general_device_information()
+            .unwrap();
+
+        info!("Connected to target: {}", target_information);
+
+        connected_programmer.enable_read_out_protection().unwrap();
+        info!("Readout protection enabled");
+
+        assert!(
+            connected_programmer
+                .save_memory_file(
+                    get_target_dir().join("memory.bin"),
+                    get_address_from_env_file(ENV_STM32_CUBE_PROGRAMMER_DOWNLOAD_BIN_START_ADDRESS),
+                    1024 * 400,
+                )
+                .is_err(),
+            "Readout protection enabled - Should not be able to read memory"
+        );
+
+        connected_programmer.disable_read_out_protection().unwrap();
+        info!("Readout protection disabled");
+
+        assert!(
+            connected_programmer
+                .save_memory_file(
+                    get_target_dir().join("memory.bin"),
+                    get_address_from_env_file(ENV_STM32_CUBE_PROGRAMMER_DOWNLOAD_BIN_START_ADDRESS),
+                    1024 * 400,
+                )
+                .is_ok(),
+            "Readout protection disabled - Should be able to read memory"
+        );
+
+        connected_programmer.disconnect();
+    } else {
+        info!("No ST-Link probes found");
+    }
+}
+
+#[test_log::test]
+fn mass_erase() {
+    dotenvy::dotenv().unwrap();
+
+    let programmer = CubeProgrammer::builder()
+        .cube_programmer_dir(get_path_from_env_file(ENV_CUBE_PROGRAMMER_DIR))
+        .build()
+        .unwrap();
+
+    let probes = programmer.list_connected_st_link_probes();
+
+    if !probes.is_empty() {
+        let connect_parameters = ConnectParameters::builder()
+            .base_connect_parameters(&probes[0])
+            .frequency(stm32cubeprogrammer::Frequency::Highest)
+            .connection_mode(stm32cubeprogrammer::ConnectionMode::UnderResetMode)
+            .build()
+            .unwrap();
+
+        info!("Found {} ST-Link probes - Trying to connect", probes.len());
+        info!("Connecting to target via probe: {}", connect_parameters);
+
+        let connected_programmer = programmer.connect_to_target(&connect_parameters).unwrap();
+        connected_programmer.mass_erase().unwrap();
 
         connected_programmer.disconnect();
     } else {

@@ -33,11 +33,12 @@ Working functionality:
 - Upgrade BLE stack
 - Reset
 - Get general device information
-
-Functionality to be added:
 - Enable readout protection
 - Disable readout protection
-- And much more.. PRs are more than welcome! 😊
+  
+Functionality to be added:
+- There are still many functions in `STM32CubeProgrammer_API.chm` which are not yet implemented.
+  -  PRs are more than welcome! 😊
 
 ## Platform support
 - Windows: Tested

@@ -10,3 +10,4 @@ fn write_hex() {
     let mut cmd = Command::cargo_bin("stm32cubeprogrammer-cli").unwrap();
     cmd.arg("download-hex").arg(hex_file).assert().success();
 }
+

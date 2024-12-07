@@ -1,10 +1,10 @@
 // TODO: Add trait for Logger and Progressbar -> CLI and TUI / GUI
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::{
     api_log, api_types, display,
-    error::{CubeProgrammerApiError, CubeProgrammerApiResult},
+    error::{CubeProgrammerError, CubeProgrammerResult},
     utility,
 };
 use derive_more::Into;
@@ -12,25 +12,31 @@ use log::debug;
 use stm32cubeprogrammer_sys::{libloading, CubeProgrammer_API};
 
 use bon::bon;
-
-pub struct NotConnected;
-pub struct Connected;
-
-pub struct CubeProgrammer<T> {
+/// CubeProgrammer struct which holds the FFI API and provides a rust wrapper around it
+pub struct CubeProgrammer {
     api: stm32cubeprogrammer_sys::CubeProgrammer_API,
+}
 
-    _phantom: std::marker::PhantomData<T>,
+pub struct ConnectedCubeProgrammer {
+    programmer: CubeProgrammer,
+    connect_parameters: api_types::ConnectParameters,
+}
+
+impl ConnectedCubeProgrammer {
+    fn api(&self) -> &CubeProgrammer_API {
+        &self.programmer.api
+    }
 }
 
 #[bon]
-impl CubeProgrammer<NotConnected> {
+impl CubeProgrammer {
     /// Create new instance of CubeProgrammer
     #[builder]
     pub fn new(
         cube_programmer_dir: impl AsRef<std::path::Path>,
         log_verbosity: Option<api_log::Verbosity>,
-        display_callback: Option<Arc<dyn crate::DisplayCallback>>,
-    ) -> Result<Self, CubeProgrammerApiError> {
+        display_callback: Option<Arc<Mutex<dyn crate::DisplayCallback>>>,
+    ) -> Result<Self, CubeProgrammerError> {
         use stm32cubeprogrammer_sys::{PATH_API_LIBRARY_RELATIVE, PATH_LOADER_DIR_RELATIVE};
 
         let api_path = cube_programmer_dir
@@ -54,16 +60,14 @@ impl CubeProgrammer<NotConnected> {
             display::set_display_callback_handler(display_callback);
         }
 
-        let library =
-            Self::load_library(&api_path).map_err(CubeProgrammerApiError::LibLoadingError)?;
+        let library = Self::load_library(&api_path).map_err(CubeProgrammerError::LibLoading)?;
 
         let api = unsafe {
-            CubeProgrammer_API::from_library(library)
-                .map_err(CubeProgrammerApiError::LibLoadingError)?
+            CubeProgrammer_API::from_library(library).map_err(CubeProgrammerError::LibLoading)?
         };
 
         unsafe {
-            api.setLoadersPath(utility::path_to_cstring(loader_path).as_ptr());
+            api.setLoadersPath(utility::path_to_cstring(loader_path)?.as_ptr());
 
             {
                 let verbosity = log_verbosity.unwrap_or({
@@ -85,28 +89,26 @@ impl CubeProgrammer<NotConnected> {
             api.setDisplayCallbacks(display_callbacks);
         }
 
-        Ok(Self {
-            api,
-            _phantom: std::marker::PhantomData::<NotConnected>,
-        })
+        Ok(Self { api })
     }
 
     /// Connect to target via ST-Link probe
     pub fn connect_to_target(
         self,
-        st_link: &api_types::StLink,
-    ) -> CubeProgrammerApiResult<CubeProgrammer<Connected>> {
+        st_link: &api_types::ConnectParameters,
+    ) -> CubeProgrammerResult<ConnectedCubeProgrammer> {
         let connection_param = st_link.0;
-        api_types::ReturnCode::from(unsafe { self.api.connectStLink(connection_param) }).check()?;
+        api_types::ReturnCode::<0>::from(unsafe { self.api.connectStLink(connection_param) })
+            .check()?;
 
-        Ok(CubeProgrammer::<Connected> {
-            api: self.api,
-            _phantom: std::marker::PhantomData::<Connected>,
+        Ok(ConnectedCubeProgrammer {
+            programmer: self,
+            connect_parameters: st_link.clone(),
         })
     }
 
     /// List all connected ST-Link probes
-    pub fn list_connected_st_link_probes(&self) -> Vec<api_types::StLink> {
+    pub fn list_connected_st_link_probes(&self) -> Vec<api_types::ConnectParameters> {
         let mut debug_parameters =
             std::ptr::null_mut::<stm32cubeprogrammer_sys::debugConnectParameters>();
         let return_value = unsafe { self.api.getStLinkList(&mut debug_parameters, 0) };
@@ -119,7 +121,7 @@ impl CubeProgrammer<NotConnected> {
 
         let st_links = slice
             .iter()
-            .map(|debug_parameters| api_types::StLink(*debug_parameters))
+            .map(|debug_parameters| api_types::ConnectParameters(*debug_parameters))
             .collect();
 
         // Free the memory allocated by the API
@@ -165,20 +167,23 @@ impl CubeProgrammer<NotConnected> {
     }
 }
 
-impl CubeProgrammer<Connected> {
+impl ConnectedCubeProgrammer {
     /// Disconnect from target
-    pub fn disconnect(&self) {
-        unsafe { self.api.disconnect() };
+    pub fn disconnect(self) -> CubeProgrammer {
+        unsafe { self.api().disconnect() };
+        self.programmer
     }
 
     /// Get general device information
     pub fn get_general_device_information(
         &self,
-    ) -> CubeProgrammerApiResult<api_types::TargetInformation> {
-        let general_information = unsafe { self.api.getDeviceGeneralInf() };
+    ) -> CubeProgrammerResult<api_types::TargetInformation> {
+        self.check_connection()?;
+
+        let general_information = unsafe { self.api().getDeviceGeneralInf() };
 
         if general_information.is_null() {
-            return Err(CubeProgrammerApiError::CommandReturnNull);
+            return Err(CubeProgrammerError::CommandReturnNull);
         }
 
         let general_information = api_types::TargetInformation(unsafe { *general_information });
@@ -186,8 +191,10 @@ impl CubeProgrammer<Connected> {
     }
 
     /// Reset target
-    pub fn reset_target(&self, reset_mode: api_types::ResetMode) -> CubeProgrammerApiResult<()> {
-        api_types::ReturnCode::from(unsafe { self.api.reset(reset_mode.into()) }).check()
+    pub fn reset_target(&self, reset_mode: api_types::ResetMode) -> CubeProgrammerResult<()> {
+        self.check_connection()?;
+
+        api_types::ReturnCode::<0>::from(unsafe { self.api().reset(reset_mode.into()) }).check()
     }
 
     /// Download hex file to target
@@ -196,12 +203,45 @@ impl CubeProgrammer<Connected> {
         file_path: impl AsRef<std::path::Path>,
         skip_erase: bool,
         verify: bool,
-    ) -> CubeProgrammerApiResult<()> {
-        let file_path = utility::path_to_wide_cstring(file_path);
+    ) -> CubeProgrammerResult<()> {
+        // Validate if the given file is a valid hex file if the feature is enabled
+        #[cfg(feature = "ihex")]
+        {
+            // Check if the given file is really a hex file
+            // Unfortunately, the CubeProgrammer API does not check this and simply programs to address 0 if a bin file is passed
+            let file_content = std::fs::read(&file_path).map_err(CubeProgrammerError::FileIo)?;
+            let file_content =
+                std::str::from_utf8(&file_content).map_err(|_| CubeProgrammerError::Parameter {
+                    message: "Invalid intelhex file".to_string(),
+                })?;
 
-        api_types::ReturnCode::from(unsafe {
-            self.api.downloadFile(
-                file_path.as_ptr(),
+            let reader = ihex::Reader::new_with_options(
+                &file_content,
+                ihex::ReaderOptions {
+                    stop_after_first_error: true,
+                    stop_after_eof: true,
+                },
+            );
+
+            for record in reader {
+                match record {
+                    Ok(_) => {}
+                    Err(e) => {
+                        return Err(CubeProgrammerError::Parameter {
+                            message: format!("Invalid intelhex file: {}", e),
+                        });
+                    }
+                }
+            }
+        }
+
+        self.check_connection()?;
+
+        let file_path = utility::path_to_widestring(file_path);
+
+        api_types::ReturnCode::<0>::from(unsafe {
+            self.api().downloadFile(
+                file_path?.as_ptr(),
                 0,
                 if skip_erase { 1 } else { 0 },
                 if verify { 1 } else { 0 },
@@ -218,12 +258,14 @@ impl CubeProgrammer<Connected> {
         start_address: u32,
         skip_erase: bool,
         verify: bool,
-    ) -> CubeProgrammerApiResult<()> {
-        let file_path = utility::path_to_wide_cstring(file_path);
+    ) -> CubeProgrammerResult<()> {
+        self.check_connection()?;
 
-        api_types::ReturnCode::from(unsafe {
-            self.api.downloadFile(
-                file_path.as_ptr(),
+        let file_path = utility::path_to_widestring(file_path);
+
+        api_types::ReturnCode::<0>::from(unsafe {
+            self.api().downloadFile(
+                file_path?.as_ptr(),
                 start_address,
                 if skip_erase { 1 } else { 0 },
                 if verify { 1 } else { 0 },
@@ -234,8 +276,11 @@ impl CubeProgrammer<Connected> {
     }
 
     /// Perform mass erase
-    pub fn mass_erase(&self) -> CubeProgrammerApiResult<()> {
-        api_types::ReturnCode::from(unsafe { self.api.massErase(std::ptr::null_mut()) }).check()
+    pub fn mass_erase(&self) -> CubeProgrammerResult<()> {
+        self.check_connection()?;
+
+        api_types::ReturnCode::<0>::from(unsafe { self.api().massErase(std::ptr::null_mut()) })
+            .check()
     }
 
     /// Update BLE stack
@@ -247,25 +292,19 @@ impl CubeProgrammer<Connected> {
         first_install: bool,
         verify: bool,
         start_stack_after_update: bool,
-    ) -> CubeProgrammerApiResult<()> {
-        let return_value = unsafe {
-            self.api.firmwareUpgrade(
-                utility::path_to_wide_cstring(file_path).as_ptr(),
+    ) -> CubeProgrammerResult<()> {
+        self.check_connection()?;
+
+        api_types::ReturnCode::<1>::from(unsafe {
+            self.api().firmwareUpgrade(
+                utility::path_to_widestring(file_path)?.as_ptr(),
                 start_address,
                 if first_install { 1 } else { 0 },
                 if verify { 1 } else { 0 },
                 if start_stack_after_update { 1 } else { 0 },
             )
-        };
-
-        // The command returns 1 on success
-        if return_value == 1 {
-            Ok(())
-        } else {
-            Err(CubeProgrammerApiError::CommandReturnCode {
-                return_code: return_value,
-            })
-        }
+        })
+        .check()
     }
 
     /// Save memory to file
@@ -275,14 +314,63 @@ impl CubeProgrammer<Connected> {
         file_path: impl AsRef<std::path::Path>,
         start_address: u32,
         size_bytes: u32,
-    ) -> CubeProgrammerApiResult<()> {
-        api_types::ReturnCode::from(unsafe {
-            self.api.saveMemoryToFile(
-                start_address as i32, // TODO: Handle properly
-                size_bytes as i32,    // TODO: Handle properly
-                utility::path_to_wide_cstring(file_path).as_ptr(),
+    ) -> CubeProgrammerResult<()> {
+        self.check_connection()?;
+
+        api_types::ReturnCode::<0>::from(unsafe {
+            self.api().saveMemoryToFile(
+                i32::try_from(start_address).map_err(|x| CubeProgrammerError::Parameter {
+                    message: format!("Start address exceeds max value: {}", x),
+                })?,
+                i32::try_from(size_bytes).map_err(|x| CubeProgrammerError::Parameter {
+                    message: format!("Size exceeds max value: {}", x),
+                })?,
+                utility::path_to_widestring(file_path)?.as_ptr(),
             )
         })
         .check()
+    }
+
+    /// Enable roud out protection level 1 (0xBB)
+    pub fn enable_read_out_protection(&self) -> CubeProgrammerResult<()> {
+        /// Command according to Example 3 of the CubeProgrammer API documentation
+        const COMMAND_ENABLE_ROP_LEVEL_1: &str = "-ob rdp=0xbb";
+
+        self.check_connection()?;
+
+        api_types::ReturnCode::<0>::from(unsafe {
+            self.api().sendOptionBytesCmd(
+                utility::string_to_cstring(COMMAND_ENABLE_ROP_LEVEL_1)?.as_ptr()
+                    as *mut std::ffi::c_char,
+            )
+        })
+        .check()
+    }
+
+    /// Disable read out protection
+    /// Attention: This command will erase the device memory
+    pub fn disable_read_out_protection(&self) -> CubeProgrammerResult<()> {
+        self.check_connection()?;
+        api_types::ReturnCode::<0>::from(unsafe { self.api().readUnprotect() }).check()?;
+        Ok(())
+    }
+
+    /// Check connection to target
+    /// Consumes self and and only returns self if the connection is still maintained
+    /// If the connection is lost, the user is forced to reconnect
+    fn check_connection(&self) -> CubeProgrammerResult<()> {
+        api_types::ReturnCode::<1>::from(unsafe { self.api().checkDeviceConnection() })
+            .check()
+            .map_err(|_| CubeProgrammerError::ConnectionLost)
+    }
+
+    /// Convenience function to reconnect using the same connect parameters which were passed in [`CubeProgrammer::connect_to_target`]
+    /// Should be called if a function returns [`CubeProgrammerError::ConnectionLost`]
+    pub fn reconnect(self) -> CubeProgrammerResult<Self> {
+        let connect_parameters = self.connect_parameters.clone();
+        let programmer = self.disconnect();
+        let connected = programmer.connect_to_target(&connect_parameters)?;
+
+        Ok(connected)
     }
 }
