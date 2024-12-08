@@ -156,7 +156,7 @@ impl CubeProgrammer<NotConnected> {
             path: impl AsRef<std::ffi::OsStr>,
         ) -> Result<libloading::Library, libloading::Error> {
             let library: libloading::Library =
-                unsafe { libloading::os::windows::Library::new(path)?.into() };
+                unsafe { libloading::os::unix::Library::new(path)?.into() };
 
             Ok(library)
         }

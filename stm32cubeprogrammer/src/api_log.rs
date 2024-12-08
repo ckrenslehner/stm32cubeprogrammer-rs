@@ -48,12 +48,12 @@ pub(crate) unsafe extern "C" fn display_callback_init_progressbar() {
     }
 }
 
-#[cfg(target_os = "unix")]
+#[cfg(unix)]
 pub(crate) unsafe extern "C" fn display_callback_log_message(level: i32, message: *const u32) {
     display_callback_log_message_inner(level, &widestring::WideCString::from_ptr_str(message));
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 pub(crate) unsafe extern "C" fn display_callback_log_message(level: i32, message: *const u16) {
     display_callback_log_message_inner(level, &widestring::WideCString::from_ptr_str(message));
 }

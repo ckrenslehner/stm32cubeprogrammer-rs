@@ -19,28 +19,41 @@ impl ReturnCode {
 }
 
 #[derive(Debug, Default, Clone, Copy, IntoPrimitive, TryFromPrimitive, strum::Display)]
-#[repr(i32)]
+#[cfg_attr(windows, repr(i32))]
+#[cfg_attr(unix, repr(u32))]
 pub enum DebugPort {
     Jtag,
     Swd,
 
     #[default]
+    #[cfg(windows)]
     Unknown = -1,
+
+    #[default]
+    #[cfg(unix)]
+    Unknown = 0xFF,
 }
 
 #[derive(Debug, Default, Clone, Copy, IntoPrimitive, TryFromPrimitive, strum::Display)]
-#[repr(i32)]
+#[cfg_attr(windows, repr(i32))]
+#[cfg_attr(unix, repr(u32))]
 pub enum ResetMode {
     SoftwareReset,
     HardwareReset,
     CoreReset,
 
     #[default]
+    #[cfg(windows)]
     Unknown = -1,
+
+    #[default]
+    #[cfg(unix)]
+    Unknown = 0xFF,
 }
 
 #[derive(Debug, Default, Clone, Copy, IntoPrimitive, TryFromPrimitive, strum::Display)]
-#[repr(i32)]
+#[cfg_attr(windows, repr(i32))]
+#[cfg_attr(unix, repr(u32))]
 pub enum ConnectionMode {
     NormalMode,
     HotplugMode,
@@ -49,7 +62,12 @@ pub enum ConnectionMode {
     HwResetPulseMode,
 
     #[default]
+    #[cfg(windows)]
     Unknown = -1,
+
+    #[default]
+    #[cfg(unix)]
+    Unknown = 0xFF,
 }
 
 #[derive(Debug, Clone)]
