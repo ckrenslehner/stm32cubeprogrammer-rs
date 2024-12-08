@@ -2,9 +2,9 @@ use std::path::PathBuf;
 
 const STM32_CUBE_PROGRAMMER_API_PATH: &str = "include/CubeProgrammer_API.h";
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 const BINDINGS_FILE_NAME: &str = "bindings_windows.rs";
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 const BINDINGS_FILE_NAME: &str = "bindings_unix.rs";
 
 fn main() {
