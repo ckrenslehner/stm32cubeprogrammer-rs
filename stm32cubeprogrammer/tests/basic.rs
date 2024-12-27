@@ -1,6 +1,9 @@
-#[cfg(test)]
-use log::{debug, info, warn};
-use stm32cubeprogrammer::{CubeProgrammer, ResetMode, Verbosity};
+use log::{debug, info};
+
+use stm32cubeprogrammer::{
+    cube_programmer::{ConnectedCubeProgrammer, ConnectedFusCubeProgrammer},
+    probe, CubeProgrammerApi,
+};
 
 /// Environment variable name for the path to the STM32CubeProgrammer directory
 /// Needs to be the root path of the STM32CubeProgrammer installatios
@@ -49,259 +52,248 @@ fn get_address_from_env_file(env_key: &str) -> u32 {
 
 /// Get the target directory -> Unfortunately MANIFEST_DIR does not work with cargo workspaces?
 fn get_target_dir() -> std::path::PathBuf {
-    let path = std::env::current_dir().unwrap();
-
-    debug!("Current dir: {:?}", path);
-
-    let path = path.join("..").join("target").canonicalize().unwrap();
-
-    debug!("Target dir: {:?}", path);
+    let path = std::env::current_dir()
+        .unwrap()
+        .join("..")
+        .join("target")
+        .canonicalize()
+        .unwrap();
     path
 }
 
-#[test_log::test]
-fn discover_st_links() {
-    dotenvy::dotenv().unwrap();
-
-    let programmer = CubeProgrammer::builder()
-        .cube_programmer_dir(get_path_from_env_file(ENV_CUBE_PROGRAMMER_DIR))
+fn get_api() -> CubeProgrammerApi {
+    let api: CubeProgrammerApi = CubeProgrammerApi::builder()
+        .cube_programmer_dir(&get_path_from_env_file(ENV_CUBE_PROGRAMMER_DIR))
+        .log_verbosity(stm32cubeprogrammer::Verbosity::Level3)
         .build()
         .unwrap();
 
-    let probes = programmer.list_connected_st_link_probes();
-
-    for probe in probes {
-        info!("Found ST-Link probe: {}", probe);
-    }
+    api
 }
 
-#[test_log::test]
-fn connect_to_target() {
-    dotenvy::dotenv().unwrap();
-
-    let programmer = CubeProgrammer::builder()
-        .cube_programmer_dir(get_path_from_env_file(ENV_CUBE_PROGRAMMER_DIR))
-        .build()
-        .unwrap();
-
-    let probes = programmer.list_connected_st_link_probes();
+fn connect(
+    api: &mut CubeProgrammerApi,
+    connect_param: probe::ConnectionParameters,
+) -> ConnectedCubeProgrammer {
+    let probes = api.list_available_probes();
 
     if !probes.is_empty() {
         info!("Found {} ST-Link probes - Trying to connect", probes.len());
         info!("Connecting to target via probe: {}", probes[0]);
 
-        let connected_programmer = programmer.connect_to_target(&probes[0]).unwrap();
-
-        let target_information = connected_programmer
-            .get_general_device_information()
+        let connected_programmer = api
+            .connect_to_target(&probes[0], &probe::Protocol::Swd, &connect_param)
             .unwrap();
 
-        info!("Connected to target: {}", target_information);
-
-        info!("Connected to target. Disconnecting...");
-        connected_programmer.disconnect();
+        connected_programmer
     } else {
-        info!("No ST-Link probes found");
+        panic!("No ST-Link probes found");
     }
+}
+
+fn connect_fus(api: &mut CubeProgrammerApi) -> ConnectedFusCubeProgrammer {
+    let probes = api.list_available_probes();
+
+    if !probes.is_empty() {
+        info!("Found {} ST-Link probes - Trying to connect", probes.len());
+        info!("Connecting to target via probe: {}", probes[0]);
+
+        let connected_programmer = api
+            .connect_to_target_fus(&probes[0], &probe::Protocol::Swd)
+            .unwrap();
+
+        connected_programmer
+    } else {
+        panic!("No ST-Link probes found");
+    }
+}
+
+// -- TEST CASES -- //
+#[test_log::test]
+fn connect_twice() {
+    dotenvy::dotenv().unwrap();
+    let api = get_api();
+    let probes = api.list_available_probes();
+
+    if probes.is_empty() {
+        panic!("No ST-Link probes found");
+    }
+
+    info!("Found {} ST-Link probes - Trying to connect", probes.len());
+    info!("Connecting to target via probe: {}", probes[0]);
+
+    let _connected_programmer = api
+        .connect_to_target(
+            &probes[0],
+            &probe::Protocol::Swd,
+            &probe::ConnectionParameters::default(),
+        )
+        .unwrap();
+
+    // Connect to same probe again -> must not work
+    if let Ok(_) = api.connect_to_target(
+        &probes[0],
+        &probe::Protocol::Swd,
+        &probe::ConnectionParameters::default(),
+    ) {
+        panic!("Connecting to the same probe twice must not work");
+    };
+}
+
+#[test_log::test]
+fn write_and_read() {
+    let data_bytes = b"\x01\x02\x03\x04\xaa\xbb\xcc\xdd_Hello_Cube";
+
+    #[repr(C, packed)]
+    #[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+    struct MyData {
+        one: u8,
+        two: u8,
+        three: i16,
+        four: u32,
+        five: [u8; 11],
+    }
+
+    dotenvy::dotenv().unwrap();
+    let mut api = get_api();
+    let connected_programmer = connect(
+        &mut api,
+        probe::ConnectionParameters {
+            connection_mode: probe::ConnectionMode::UnderReset,
+            ..Default::default()
+        },
+    );
+
+    let address = stm32cubeprogrammer_sys::SRAM_BASE_ADDRESS + 1024;
+
+    // Write bytes and read pod
+    connected_programmer
+        .write_memory_bytes(address, data_bytes)
+        .unwrap();
+    connected_programmer
+        .write_memory_bytes(address + std::mem::size_of::<MyData>() as u32, data_bytes)
+        .unwrap();
+
+    let read = connected_programmer
+        .read_memory::<MyData>(address, 2)
+        .unwrap();
+
+    dbg!(&read);
+    assert_eq!(bytemuck::bytes_of(&read[0]), data_bytes);
+    assert_eq!(read[0], read[1]);
+
+    // Read elements separately
+    let curr = connected_programmer.read_memory::<u8>(address, 1).unwrap()[0];
+    assert_eq!(curr, read[0].one);
+
+    let curr = connected_programmer.read_memory::<u8>(address + 1, 1).unwrap()[0];
+    assert_eq!(curr, read[0].two);
+
+    let curr = connected_programmer.read_memory::<i16>(address + 2, 1).unwrap()[0];
+    let three = read[0].three;
+    assert_eq!(curr, three);
+
+    let curr = connected_programmer.read_memory::<u32>(address + 4, 1).unwrap()[0];
+    let four = read[0].four;
+    assert_eq!(curr, four);
+
+    let curr = connected_programmer.read_memory::<[u8; 11]>(address + 8, 1).unwrap()[0];
+    let five = read[0].five;
+    assert_eq!(curr, five);
+
+    let address = stm32cubeprogrammer_sys::SRAM_BASE_ADDRESS + 2048;
+
+    // Write pod and read bytes
+    let data = vec![read[0]; 2];
+    dbg!(&data);
+
+    connected_programmer
+        .write_memory::<MyData>(address, &data)
+        .unwrap();
+
+    let read = connected_programmer
+        .read_memory_bytes(address, std::mem::size_of::<MyData>())
+        .unwrap();
+    assert_eq!(read.as_slice(), data_bytes);
+
+    let read = connected_programmer
+        .read_memory_bytes(
+            address + std::mem::size_of::<MyData>() as u32,
+            std::mem::size_of::<MyData>(),
+        )
+        .unwrap();
+    assert_eq!(read.as_slice(), data_bytes);
+}
+
+#[test_log::test]
+fn fus_actions() {
+    dotenvy::dotenv().unwrap();
+    let mut api = get_api();
+
+    let connected_programmer = connect_fus(&mut api);
+    dbg!(connected_programmer.fus_info());
+
+    // Delete BLE stack
+    connected_programmer.delete_ble_stack().unwrap();
+    connected_programmer.disconnect();
+
+    // Reconnect to read updated FUS information
+    let connected_programmer = connect_fus(&mut api);
+    let fus_info = connected_programmer.fus_info();
+    dbg!(&fus_info);
+    assert_eq!(
+        fus_info.wireless_stack_version,
+        stm32cubeprogrammer::fus::Version::try_from("0.0.0").unwrap()
+    );
+
+    // Upgrade BLE stack
+    let ble_stack_binary = get_path_from_env_file(ENV_STM32_CUBE_PROGRAMMER_BLE_STACK_PATH);
+    info!("Downloading ble stack file: {:?}", ble_stack_binary);
+
+    connected_programmer
+        .update_ble_stack(
+            ble_stack_binary,
+            get_address_from_env_file(STM32_CUBE_PROGRAMMER_BLE_STACK_START_ADDRESS),
+            false,
+            true,
+            true,
+        )
+        .unwrap();
+
+    connected_programmer.disconnect();
+    let connected_programmer = connect_fus(&mut api);
+    dbg!(connected_programmer.fus_info());
 }
 
 #[test_log::test]
 fn download_hex_file() {
     dotenvy::dotenv().unwrap();
+    let mut api = get_api();
+    let connected_programmer = connect(&mut api, probe::ConnectionParameters::default());
 
-    let programmer = CubeProgrammer::builder()
-        .cube_programmer_dir(get_path_from_env_file(ENV_CUBE_PROGRAMMER_DIR))
-        .build()
+    let hex_file = get_path_from_env_file(ENV_STM32_CUBE_PROGRAMMER_DOWNLOAD_HEX_PATH);
+    info!("Downloading hex file: {:?}", hex_file);
+
+    connected_programmer
+        .download_hex_file(hex_file, false, true)
         .unwrap();
-
-    let probes = programmer.list_connected_st_link_probes();
-
-    if !probes.is_empty() {
-        info!("Found {} ST-Link probes - Trying to connect", probes.len());
-        info!("Connecting to target via probe: {}", probes[0]);
-
-        let connected_programmer = programmer.connect_to_target(&probes[0]).unwrap();
-
-        let target_information = connected_programmer
-            .get_general_device_information()
-            .unwrap();
-
-        info!("Connected to target: {}", target_information);
-
-        let hex_file = get_path_from_env_file(ENV_STM32_CUBE_PROGRAMMER_DOWNLOAD_HEX_PATH);
-        info!("Downloading hex file: {:?}", hex_file);
-
-        connected_programmer
-            .download_hex_file(hex_file, false, true)
-            .unwrap();
-
-        info!("Connected to target. Disconnecting...");
-
-        connected_programmer
-            .reset_target(ResetMode::HardwareReset)
-            .unwrap();
-        connected_programmer.disconnect();
-    } else {
-        info!("No ST-Link probes found");
-    }
 }
 
 #[test_log::test]
 fn download_bin_file() {
     dotenvy::dotenv().unwrap();
+    let mut api = get_api();
+    let connected_programmer = connect(&mut api, probe::ConnectionParameters::default());
 
-    let programmer = CubeProgrammer::builder()
-        .cube_programmer_dir(get_path_from_env_file(ENV_CUBE_PROGRAMMER_DIR))
-        .build()
+    let hex_file = get_path_from_env_file(ENV_STM32_CUBE_PROGRAMMER_DOWNLOAD_BIN_PATH);
+    info!("Downloading hex file: {:?}", hex_file);
+
+    connected_programmer
+        .download_bin_file(
+            hex_file,
+            get_address_from_env_file(ENV_STM32_CUBE_PROGRAMMER_DOWNLOAD_BIN_START_ADDRESS),
+            false,
+            true,
+        )
         .unwrap();
-
-    let probes = programmer.list_connected_st_link_probes();
-
-    if !probes.is_empty() {
-        info!("Found {} ST-Link probes - Trying to connect", probes.len());
-        info!("Connecting to target via probe: {}", probes[0]);
-
-        let connected_programmer = programmer.connect_to_target(&probes[0]).unwrap();
-
-        let target_information = connected_programmer
-            .get_general_device_information()
-            .unwrap();
-
-        info!("Connected to target: {}", target_information);
-
-        let hex_file = get_path_from_env_file(ENV_STM32_CUBE_PROGRAMMER_DOWNLOAD_BIN_PATH);
-        info!("Downloading bin file: {:?}", hex_file);
-
-        connected_programmer
-            .download_bin_file(
-                hex_file,
-                get_address_from_env_file(ENV_STM32_CUBE_PROGRAMMER_DOWNLOAD_BIN_START_ADDRESS),
-                false,
-                true,
-            )
-            .unwrap();
-
-        info!("Connected to target. Disconnecting...");
-
-        connected_programmer
-            .reset_target(ResetMode::HardwareReset)
-            .unwrap();
-        connected_programmer.disconnect();
-    } else {
-        info!("No ST-Link probes found");
-    }
-}
-
-#[test_log::test]
-fn upgrade_ble_stack() {
-    dotenvy::dotenv().unwrap();
-
-    let programmer = CubeProgrammer::builder()
-        .cube_programmer_dir(get_path_from_env_file(ENV_CUBE_PROGRAMMER_DIR))
-        .build()
-        .unwrap();
-
-    let probes = programmer.list_connected_st_link_probes();
-
-    if !probes.is_empty() {
-        info!("Found {} ST-Link probes - Trying to connect", probes.len());
-        info!("Connecting to target via probe: {}", probes[0]);
-
-        let connected_programmer = programmer.connect_to_target(&probes[0]).unwrap();
-
-        let target_information = connected_programmer
-            .get_general_device_information()
-            .unwrap();
-
-        info!("Connected to target: {}", target_information);
-
-        let ble_stack_binary = get_path_from_env_file(ENV_STM32_CUBE_PROGRAMMER_BLE_STACK_PATH);
-        info!("Downloading ble stack file: {:?}", ble_stack_binary);
-
-        connected_programmer
-            .update_ble_stack(
-                ble_stack_binary,
-                get_address_from_env_file(STM32_CUBE_PROGRAMMER_BLE_STACK_START_ADDRESS),
-                false,
-                true,
-                true,
-            )
-            .unwrap();
-
-        info!("Connected to target. Disconnecting...");
-
-        connected_programmer
-            .reset_target(ResetMode::HardwareReset)
-            .unwrap();
-        connected_programmer.disconnect();
-    } else {
-        info!("No ST-Link probes found");
-    }
-}
-
-/// Test showing how to register a custom display handler
-/// This can be used in e.g. a CLI or GUI application to show the progress of the operations
-#[test_log::test]
-fn register_display_handler() {
-    use std::sync::Arc;
-
-    /// Custom display handler
-    struct MyDisplayHandler;
-
-    impl stm32cubeprogrammer::DisplayCallback for MyDisplayHandler {
-        fn init_progressbar(&self) {
-            warn!("MyDisplayHandler - Init progress bar");
-        }
-
-        fn log_message(&self, message_type: stm32cubeprogrammer::LogMessageType, message: &str) {
-            info!(
-                "MyDisplayHandler - Log message: {:?} - {}",
-                message_type, message
-            );
-        }
-
-        fn update_progressbar(&self, current_number: u64, total_number: u64) {
-            warn!(
-                "MyDisplayHandler - Update progress bar: {}/{}",
-                current_number, total_number
-            );
-        }
-    }
-
-    dotenvy::dotenv().unwrap();
-
-    let programmer = CubeProgrammer::builder()
-        .cube_programmer_dir(get_path_from_env_file(ENV_CUBE_PROGRAMMER_DIR))
-        .log_verbosity(Verbosity::Level2)
-        .display_callback(Arc::new(MyDisplayHandler))
-        .build()
-        .unwrap();
-
-    let probes = programmer.list_connected_st_link_probes();
-
-    if !probes.is_empty() {
-        info!("Found {} ST-Link probes - Trying to connect", probes.len());
-        info!("Connecting to target via probe: {}", probes[0]);
-
-        let connected_programmer = programmer.connect_to_target(&probes[0]).unwrap();
-
-        let target_information = connected_programmer
-            .get_general_device_information()
-            .unwrap();
-
-        info!("Connected to target: {}", target_information);
-
-        // Read the memory and store it to the target dir
-        connected_programmer
-            .save_memory_file(
-                get_target_dir().join("memory.bin"),
-                get_address_from_env_file(ENV_STM32_CUBE_PROGRAMMER_DOWNLOAD_BIN_START_ADDRESS),
-                1024 * 400,
-            )
-            .unwrap();
-
-        connected_programmer.disconnect();
-    } else {
-        info!("No ST-Link probes found");
-    }
 }

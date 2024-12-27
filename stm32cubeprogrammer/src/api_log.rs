@@ -1,12 +1,12 @@
 //! Display callback functions for CubeProgrammer API logging
 
 use log::trace;
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use num_enum::{FromPrimitive, IntoPrimitive};
 
 use crate::utility;
 
 /// Log message type
-#[derive(Debug, Default, Clone, Copy, IntoPrimitive, TryFromPrimitive, strum::Display)]
+#[derive(Debug, Clone, Copy, IntoPrimitive, FromPrimitive, strum::Display)]
 #[repr(i32)]
 pub enum LogMessageType {
     Normal,
@@ -22,12 +22,12 @@ pub enum LogMessageType {
     WarningNoPopup,
     ErrorNoPopup,
 
-    #[default]
-    Unknown = -1,
+    #[num_enum(catch_all)]
+    Unknown(i32),
 }
 
 /// Verbosity level
-#[derive(Debug, Default, Clone, Copy, IntoPrimitive, strum::Display)]
+#[derive(Debug, Clone, Copy, IntoPrimitive, FromPrimitive, strum::Display)]
 #[repr(i32)]
 pub enum Verbosity {
     Level0,
@@ -35,8 +35,8 @@ pub enum Verbosity {
     Level2,
     Level3,
 
-    #[default]
-    Unknown = -1,
+    #[num_enum(catch_all)]
+    Unknown(i32),
 }
 
 pub(crate) unsafe extern "C" fn display_callback_init_progressbar() {
@@ -44,7 +44,7 @@ pub(crate) unsafe extern "C" fn display_callback_init_progressbar() {
 
     // Forward to display handler if there is one
     if let Some(display_handler) = crate::display::get_display_callback_handler() {
-        display_handler.init_progressbar();
+        display_handler.lock().unwrap().init_progressbar();
     }
 }
 
@@ -62,6 +62,10 @@ pub(crate) unsafe extern "C" fn display_callback_load_bar(
     mut current_number: i32,
     total_number: i32,
 ) {
+    if total_number == 0 {
+        return;
+    }
+
     if current_number > total_number {
         current_number = total_number;
     }
@@ -72,14 +76,17 @@ pub(crate) unsafe extern "C" fn display_callback_load_bar(
             return;
         }
 
-        display_handler.update_progressbar(current_number as u64, total_number as u64);
+        display_handler
+            .lock()
+            .unwrap()
+            .update_progressbar(current_number as u64, total_number as u64);
     }
 
     log::trace!("Update progress bar: {}/{}", current_number, total_number);
 }
 
 fn display_callback_log_message_inner(level: i32, message: &widestring::WideCString) {
-    let level = LogMessageType::try_from(level).unwrap_or(LogMessageType::default());
+    let level = LogMessageType::from_primitive(level);
 
     let log_level = match level {
         LogMessageType::Verbosity3 => log::Level::Trace,
@@ -94,26 +101,21 @@ fn display_callback_log_message_inner(level: i32, message: &widestring::WideCStr
         LogMessageType::GreenInfoNoPopup => log::Level::Info,
         LogMessageType::WarningNoPopup => log::Level::Warn,
         LogMessageType::ErrorNoPopup => log::Level::Error,
-        LogMessageType::Unknown => log::Level::Error,
+        LogMessageType::Unknown(_) => log::Level::Error,
     };
 
-    if log_level != log::Level::Trace {
-        trace!(
-            "API log - level: {:?}, message: {}",
-            level,
-            utility::wide_cstring_to_string(message)
-        );
-    }
+    let converted_message = utility::widestring_to_string(message);
 
-    // Forward to display handler if there is one
-    if let Some(display_handler) = crate::display::get_display_callback_handler() {
-        display_handler.log_message(level, &utility::wide_cstring_to_string(message));
-    }
+    if let Ok(message) = converted_message {
+        trace!("API log - level: {:?}, message: {}", level, message);
 
-    log::log!(
-        log_level,
-        "{:?}, {}",
-        level,
-        utility::wide_cstring_to_string(message)
-    );
+        // Forward to display handler if there is one
+        if let Some(display_handler) = crate::display::get_display_callback_handler() {
+            display_handler.lock().unwrap().log_message(level, &message);
+        }
+
+        log::log!(log_level, "{:?}, {}", level, message);
+    } else {
+        log::error!("Failed to convert message to string");
+    }
 }
