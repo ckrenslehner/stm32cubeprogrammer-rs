@@ -7,6 +7,8 @@ shebang := if os() == 'windows' {
   '/usr/bin/env nu'
 }
 
+import 'stm32cubeprogrammer-sys/justfile'
+
 # List all the recipes
 default:
     just -l

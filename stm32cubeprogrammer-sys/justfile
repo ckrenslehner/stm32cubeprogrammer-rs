@@ -1,0 +1,11 @@
+bindgen_header := "include/CubeProgrammer_API.h"
+
+bindgen_output := if os() == 'windows' {
+  "src/bindings_windows.rs"
+} else {
+  "src/bindings_unix.rs"
+}
+
+# Generate bindings for the CubeProgrammer API dynamic library
+generate-bindings:
+    bindgen {{source_directory()}}/{{bindgen_header}} --dynamic-loading CubeProgrammer_API --output {{source_directory()}}/{{bindgen_output}} -- -x c++
