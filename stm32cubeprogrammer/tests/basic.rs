@@ -234,7 +234,7 @@ fn fus_actions() {
     dbg!(connected_programmer.fus_info());
 
     // Delete BLE stack
-    connected_programmer.delete_ble_stack().unwrap();
+    connected_programmer.delete_wireless_stack().unwrap();
     connected_programmer.disconnect();
 
     // Reconnect to read updated FUS information
@@ -251,7 +251,7 @@ fn fus_actions() {
     info!("Downloading ble stack file: {:?}", ble_stack_binary);
 
     connected_programmer
-        .update_ble_stack(
+        .upgrade_wireless_stack(
             ble_stack_binary,
             get_address_from_env_file(STM32_CUBE_PROGRAMMER_BLE_STACK_START_ADDRESS),
             false,

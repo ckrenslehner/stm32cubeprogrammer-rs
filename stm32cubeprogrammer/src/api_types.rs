@@ -34,11 +34,12 @@ pub enum ErrorCode {
 pub(crate) struct ReturnCode<const SUCCESS: i32>(pub i32);
 
 impl<const SUCCESS: i32> ReturnCode<SUCCESS> {
-    pub(crate) fn check(&self) -> CubeProgrammerResult<()> {
+    pub(crate) fn check(&self, action: crate::error::Action) -> CubeProgrammerResult<()> {
         if self.0 == SUCCESS {
             Ok(())
         } else {
-            Err(CubeProgrammerError::CommandReturnCode {
+            Err(CubeProgrammerError::ActionFailed {
+                action,
                 return_code: ErrorCode::from(self.0),
             })
         }
