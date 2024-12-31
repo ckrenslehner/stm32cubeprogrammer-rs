@@ -16,6 +16,8 @@ use derive_more::Into;
 use log::{debug, error};
 use stm32cubeprogrammer_sys::SRAM_BASE_ADDRESS;
 
+use stm32cubeprogrammer_sys::libloading;
+
 type ProbeRegistry = HashMap<crate::probe::Serial, Option<crate::probe::Probe>>;
 
 /// Struct which holds the FFI API and helps with loading and setting up the CubeProgrammer API
@@ -260,17 +262,17 @@ impl CubeProgrammerApi {
             },
         )?;
 
-        if !connected.supports_fus() {
-            let target_information = connected.target_information().clone();
-            connected.disconnect();
+        // if !connected.supports_fus() {
+        //     let target_information = connected.target_information().clone();
+        //     connected.disconnect();
 
-            return Err(CubeProgrammerError::NotSupported {
-                message: format!(
-                    "FUS not supported by connected target series: {}",
-                    target_information.series()
-                ),
-            });
-        }
+        //     return Err(CubeProgrammerError::NotSupported {
+        //         message: format!(
+        //             "FUS not supported by connected target series: {}",
+        //             target_information.series()
+        //         ),
+        //     });
+        // }
 
         // Start the FUS
         api_types::ReturnCode::<1>::from(unsafe { connected.api.startFus() })
@@ -303,18 +305,16 @@ impl CubeProgrammerApi {
     fn load_library(
         api_library_path: impl AsRef<std::ffi::OsStr>,
     ) -> Result<
-        stm32cubeprogrammer_sys::libloading::Library,
-        stm32cubeprogrammer_sys::libloading::Error,
+        libloading::Library,
+        libloading::Error,
     > {
         #[cfg(windows)]
         unsafe fn load_inner(
             path: impl AsRef<std::ffi::OsStr>,
         ) -> Result<
-            stm32cubeprogrammer_sys::libloading::Library,
-            stm32cubeprogrammer_sys::libloading::Error,
+            libloading::Library,
+            libloading::Error,
         > {
-            use stm32cubeprogrammer_sys::libloading;
-
             let library: libloading::Library = unsafe {
                 libloading::os::windows::Library::load_with_flags(
                     path,
@@ -332,6 +332,8 @@ impl CubeProgrammerApi {
         unsafe fn load_inner(
             path: impl AsRef<std::ffi::OsStr>,
         ) -> Result<libloading::Library, libloading::Error> {
+            use stm32cubeprogrammer_sys::libloading;
+
             let library: libloading::Library =
                 unsafe { libloading::os::unix::Library::new(path)?.into() };
 
@@ -759,7 +761,7 @@ impl ConnectedCubeProgrammer<'_> {
 
     /// Start the wireless stack
     pub fn start_wireless_stack(&self) -> CubeProgrammerResult<()> {
-        self.supports_fus()?;
+        // self.supports_fus()?;
 
         api_types::ReturnCode::<1>::from(unsafe { self.api.startWirelessStack() })
             .check(crate::error::Action::StartWirelessStack)
