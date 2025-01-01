@@ -186,18 +186,26 @@ fn write_and_read() {
     let curr = connected_programmer.read_memory::<u8>(address, 1).unwrap()[0];
     assert_eq!(curr, read[0].one);
 
-    let curr = connected_programmer.read_memory::<u8>(address + 1, 1).unwrap()[0];
+    let curr = connected_programmer
+        .read_memory::<u8>(address + 1, 1)
+        .unwrap()[0];
     assert_eq!(curr, read[0].two);
 
-    let curr = connected_programmer.read_memory::<i16>(address + 2, 1).unwrap()[0];
+    let curr = connected_programmer
+        .read_memory::<i16>(address + 2, 1)
+        .unwrap()[0];
     let three = read[0].three;
     assert_eq!(curr, three);
 
-    let curr = connected_programmer.read_memory::<u32>(address + 4, 1).unwrap()[0];
+    let curr = connected_programmer
+        .read_memory::<u32>(address + 4, 1)
+        .unwrap()[0];
     let four = read[0].four;
     assert_eq!(curr, four);
 
-    let curr = connected_programmer.read_memory::<[u8; 11]>(address + 8, 1).unwrap()[0];
+    let curr = connected_programmer
+        .read_memory::<[u8; 11]>(address + 8, 1)
+        .unwrap()[0];
     let five = read[0].five;
     assert_eq!(curr, five);
 

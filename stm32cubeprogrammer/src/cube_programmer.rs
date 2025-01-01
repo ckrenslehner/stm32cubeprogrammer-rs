@@ -18,6 +18,9 @@ use stm32cubeprogrammer_sys::SRAM_BASE_ADDRESS;
 
 use stm32cubeprogrammer_sys::libloading;
 
+/// HashMap to store connected probes.
+/// The key is the serial number of the probe.
+/// The value is an option of a probe: A probe is only usable for one target connection at a time. If a connection is established, the probe is taken from the hashmap. If a connection is closed, the probe is returned to the hashmap.
 type ProbeRegistry = HashMap<crate::probe::Serial, Option<crate::probe::Probe>>;
 
 /// Struct which holds the FFI API and helps with loading and setting up the CubeProgrammer API
@@ -25,7 +28,7 @@ pub struct CubeProgrammerApi {
     /// API
     api: stm32cubeprogrammer_sys::CubeProgrammer_API,
 
-    /// HashMap to store connected probes. The key is the serial number of the probe
+    /// Registry of probes
     probe_registry: Rc<RefCell<ProbeRegistry>>,
 }
 
@@ -119,6 +122,7 @@ impl CubeProgrammerApi {
         })
     }
 
+    /// Scan of connected probes and add sync the probe registry. If a probe is already in use for a target connection, the related entry is unchanged.
     fn scan_for_probes(&self) {
         let mut debug_parameters =
             std::ptr::null_mut::<stm32cubeprogrammer_sys::debugConnectParameters>();
@@ -246,6 +250,12 @@ impl CubeProgrammerApi {
     }
 
     /// Connect to the firmware update service (FUS) of a target via a given probe
+    /// No custom connection parameters can be specified, as a special [connection procedure](https://wiki.st.com/stm32mcu/wiki/Connectivity:STM32WB_FUS) is necessary to access the FUS info table:
+    /// - Disconnect
+    /// - Connect (mode: normal ; reset: hardware)
+    /// - Start FUS
+    /// - Disconnect
+    /// - Connect (mode: normal ; reset: hot-plug)
     pub fn connect_to_target_fus(
         &self,
         probe_serial_number: &crate::probe::Serial,
@@ -262,21 +272,11 @@ impl CubeProgrammerApi {
             },
         )?;
 
-        // if !connected.supports_fus() {
-        //     let target_information = connected.target_information().clone();
-        //     connected.disconnect();
-
-        //     return Err(CubeProgrammerError::NotSupported {
-        //         message: format!(
-        //             "FUS not supported by connected target series: {}",
-        //             target_information.series()
-        //         ),
-        //     });
-        // }
+        connected.check_fus_support()?;
 
         // Start the FUS
         api_types::ReturnCode::<1>::from(unsafe { connected.api.startFus() })
-            .check(crate::error::Action::StartFirmwareUpdateService)?;
+            .check(crate::error::Action::StartFus)?;
 
         // Disconnect
         connected.disconnect();
@@ -304,17 +304,11 @@ impl CubeProgrammerApi {
     /// Load the dynamic library with libloading
     fn load_library(
         api_library_path: impl AsRef<std::ffi::OsStr>,
-    ) -> Result<
-        libloading::Library,
-        libloading::Error,
-    > {
+    ) -> Result<libloading::Library, libloading::Error> {
         #[cfg(windows)]
         unsafe fn load_inner(
             path: impl AsRef<std::ffi::OsStr>,
-        ) -> Result<
-            libloading::Library,
-            libloading::Error,
-        > {
+        ) -> Result<libloading::Library, libloading::Error> {
             let library: libloading::Library = unsafe {
                 libloading::os::windows::Library::load_with_flags(
                     path,
@@ -378,23 +372,28 @@ impl ConnectedCubeProgrammer<'_> {
     }
 
     /// Check if the connected target supports the firmware update service (FUS)
-    fn supports_fus(&self) -> bool {
+    pub fn fus_support(&self) -> bool {
         // TODO: Add support for wb1x
         self.general_information.name().eq("STM32WB5x/35xx")
     }
 
+    fn check_fus_support(&self) -> CubeProgrammerResult<()> {
+        if !self.fus_support() {
+            return Err(CubeProgrammerError::ActionNotSupported {
+                action: crate::error::Action::StartFus,
+                message: format!(
+                    "Connection target {} does not support FUS",
+                    self.general_information.name()
+                ),
+            });
+        }
+
+        Ok(())
+    }
+
     /// Reads the firmware update service (FUS) information from the shared SRAM2A
-    /// To read the device info table the following procedure needs to be followed ([source](https://wiki.st.com/stm32mcu/wiki/Connectivity:STM32WB_FUS)):
-    /// - Disconnect
-    /// - Connect (mode: normal ; reset: hardware)
-    /// - Start FUS
-    /// - Disconnect
-    /// - Connect (mode: normal ; reset: hot-plug)
-    /// - Read the device info table
-    ///
-    /// The connect/disconnect procedure above needs to be performed before calling this function
     fn read_fus_info(&self) -> CubeProgrammerResult<crate::fus::Information> {
-        /// Helper function to convert the version word to major, minor, sub
+        /// Helper function to convert the version word to major, minor, subs
         fn u32_to_version(version: u32) -> crate::fus::Version {
             const INFO_VERSION_MAJOR_OFFSET: u32 = 24;
             const INFO_VERSION_MAJOR_MASK: u32 = 0xff000000;
@@ -443,7 +442,7 @@ impl ConnectedCubeProgrammer<'_> {
 
         if info_table_address == 0 {
             return Err(CubeProgrammerError::ActionOutputUnexpected {
-                action: crate::error::Action::ReadFirmwareUpdateServiceInfo,
+                action: crate::error::Action::ReadFusInfo,
                 unexpected_output: crate::error::UnexpectedOutput::Null,
             });
         }
@@ -453,7 +452,7 @@ impl ConnectedCubeProgrammer<'_> {
         if info_table.device_info_table_state != FUS_DEVICE_INFO_TABLE_VALIDITY_KEYWORD {
             error!("Read FUS info table is not valid. Return default FUS info");
             return Err(CubeProgrammerError::ActionOutputUnexpected {
-                action: crate::error::Action::ReadFirmwareUpdateServiceInfo,
+                action: crate::error::Action::ReadFusInfo,
                 unexpected_output: crate::error::UnexpectedOutput::Null,
             });
         }
@@ -761,7 +760,7 @@ impl ConnectedCubeProgrammer<'_> {
 
     /// Start the wireless stack
     pub fn start_wireless_stack(&self) -> CubeProgrammerResult<()> {
-        // self.supports_fus()?;
+        self.check_fus_support()?;
 
         api_types::ReturnCode::<1>::from(unsafe { self.api.startWirelessStack() })
             .check(crate::error::Action::StartWirelessStack)

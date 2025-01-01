@@ -260,7 +260,13 @@ fn main() -> Result<(), anyhow::Error> {
 
                 if flash_ble_stack {
                     programmer
-                        .upgrade_wireless_stack(&ble_stack.path, ble_stack.address.0, false, true, true)
+                        .upgrade_wireless_stack(
+                            &ble_stack.path,
+                            ble_stack.address.0,
+                            false,
+                            true,
+                            true,
+                        )
                         .with_context(|| "Failed to update BLE stack")?;
                 } else {
                     programmer

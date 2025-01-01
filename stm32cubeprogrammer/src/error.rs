@@ -18,8 +18,8 @@ pub enum Action {
     ReadTargetInfo,
     ReadMemory,
     WriteMemory,
-    StartFirmwareUpdateService,
-    ReadFirmwareUpdateServiceInfo,
+    StartFus,
+    ReadFusInfo,
     Reset,
     DownloadFile,
     MassErase,
@@ -72,7 +72,7 @@ pub enum CubeProgrammerError {
         #[error(source)]
         source: TypeConversionError,
     },
-    
+
     FileIo(std::io::Error),
 
     LibLoading(stm32cubeprogrammer_sys::libloading::Error),
