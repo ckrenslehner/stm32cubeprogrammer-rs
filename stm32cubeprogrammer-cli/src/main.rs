@@ -1,4 +1,6 @@
 mod display_handler;
+mod parse;
+
 use anyhow::Context;
 use clap::{Parser, Subcommand, ValueEnum};
 use display_handler::DisplayHandler;
