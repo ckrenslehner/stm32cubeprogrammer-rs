@@ -4,6 +4,26 @@ use std::path::Path;
 
 use crate::error::{CubeProgrammerError, CubeProgrammerResult, TypeConversionError};
 
+#[derive(Debug, Clone, PartialEq)]
+/// Wrapper type for parsing a hex address from a string
+pub struct HexAddress(pub u32);
+
+impl std::str::FromStr for HexAddress
+where
+    HexAddress: Sized,
+{
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let address = if s.starts_with("0x") || s.starts_with("0X") {
+            u32::from_str_radix(&s[2..], 16).map_err(|_| "Failed to parse hex address")?
+        } else {
+            u32::from_str_radix(s, 16).map_err(|_| "Failed to parse hex address")?
+        };
+        Ok(HexAddress(address))
+    }
+}
+
 /// Remove the extended path prefix from a path
 fn remove_extended_path_prefix(path: &str) -> &str {
     #[cfg(windows)]

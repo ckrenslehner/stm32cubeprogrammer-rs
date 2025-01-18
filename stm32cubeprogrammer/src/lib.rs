@@ -8,7 +8,7 @@ pub mod display;
 pub use display::DisplayCallback;
 
 pub mod cube_programmer;
-pub use cube_programmer::CubeProgrammerApi;
+pub use cube_programmer::{ConnectedFusProgrammer, ConnectedProgrammer, CubeProgrammer};
 
 pub mod error;
 pub mod utility;
@@ -17,4 +17,5 @@ pub mod utility;
 pub use bytemuck;
 
 #[cfg(feature = "ihex")]
+// Re-export of the `ihex` crate -> needed for parsing of Intel Hex files
 pub use ihex;

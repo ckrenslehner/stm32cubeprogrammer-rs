@@ -30,6 +30,7 @@ pub enum Action {
     UpgradeWirelessStack,
     DeleteWirelessStack,
     StartWirelessStack,
+    ListConnectedProbes,
 }
 
 #[derive(Debug, Error, Display)]

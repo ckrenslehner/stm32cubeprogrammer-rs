@@ -29,12 +29,12 @@ derive_more = { version = "1", features = [
     "error",
     "display",
     "into",
-    "as_ref"
+    "as_ref",
 ] }
 log.workspace = true
 widestring = "1.1.0"
 num_enum = "0.7.3"
-bytemuck = { version = "1.20.0", features = ["derive"] }
+bytemuck = { version = "1.20.0" }
 strum = { version = "0.26.3", features = ["derive"] }
 lazy_static = "1.5.0"
 bon = "3.2.0"
@@ -44,3 +44,4 @@ ihex = { optional = true, version = "3.0" }
 [dev-dependencies]
 dotenvy.workspace = true
 test-log.workspace = true
+bytemuck = { version = "1.20.0", features = ["derive"] }

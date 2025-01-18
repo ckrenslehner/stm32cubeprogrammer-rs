@@ -2,7 +2,7 @@ use crate::error::{CubeProgrammerError, CubeProgrammerResult};
 use derive_more::derive::{AsRef, Deref, Display, From, Into};
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
-/// Negative error codes returned by the CubeProgrammer API
+/// Error codes returned by the CubeProgrammer API
 #[derive(Debug, Copy, Clone, strum::Display, IntoPrimitive, FromPrimitive)]
 #[repr(i32)]
 pub enum ErrorCode {
@@ -54,6 +54,7 @@ pub mod probe {
     )]
     #[cfg_attr(windows, repr(i32))]
     #[cfg_attr(unix, repr(u32))]
+    /// Debug protocol for the target connection
     pub enum Protocol {
         Jtag,
         #[default]
@@ -65,6 +66,7 @@ pub mod probe {
     )]
     #[cfg_attr(windows, repr(i32))]
     #[cfg_attr(unix, repr(u32))]
+    /// Reset mode for the target connection
     pub enum ResetMode {
         Software,
         #[default]
@@ -77,6 +79,7 @@ pub mod probe {
     )]
     #[cfg_attr(windows, repr(i32))]
     #[cfg_attr(unix, repr(u32))]
+    /// Connection mode for the target connection
     pub enum ConnectionMode {
         #[default]
         Normal,
@@ -86,12 +89,7 @@ pub mod probe {
         HardwareResetPulse,
     }
 
-    /// Frequency of the programmer (Low, Medium, High or Custom) depending on the chosen DebugPort
-    /// - Low: Lowest available frequency
-    /// - Medium: Medium frequency
-    /// - High: Highest available frequency
-    ///
-    /// Custom frequency is in Hz
+    /// Frequency for the target connection
     #[derive(Debug, Default, Clone, PartialEq)]
     pub enum Frequency {
         Low,
@@ -104,6 +102,7 @@ pub mod probe {
     }
 
     #[derive(Debug, Clone, PartialEq)]
+    /// Connection parameters for the target connection
     pub struct ConnectionParameters {
         pub frequency: Frequency,
         pub reset_mode: ResetMode,
@@ -121,10 +120,27 @@ pub mod probe {
     }
 
     #[derive(Debug, Clone, Deref, From, AsRef, Into, Hash, PartialEq, Eq, Display)]
+    /// The serial of a probe
     pub struct Serial(String);
+
+    impl std::str::FromStr for Serial {
+        type Err = CubeProgrammerError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            if s.is_empty() {
+                return Err(CubeProgrammerError::TypeConversion {
+                    message: "Cannot convert empty string to serial".to_string(),
+                    source: crate::error::TypeConversionError::NullError,
+                });
+            }
+
+            Ok(Serial(s.to_string()))
+        }
+    }
 
     #[derive(Debug, Clone, Deref)]
     #[repr(transparent)]
+    /// Transparent wrapper around the [`stm32cubeprogrammer_sys::debugConnectParameters`]
     pub(crate) struct Probe(pub(crate) stm32cubeprogrammer_sys::debugConnectParameters);
 
     impl Probe {
@@ -231,6 +247,7 @@ pub mod probe {
 }
 
 #[derive(Debug, Clone)]
+/// General information about the target. This is read from the target after a successful connection
 pub struct TargetInformation(pub(crate) stm32cubeprogrammer_sys::generalInf);
 
 impl TargetInformation {
@@ -312,6 +329,7 @@ pub mod fus {
     use super::*;
 
     #[derive(Copy, Clone, Debug, PartialEq, Default)]
+    /// Version of the FUS
     pub struct Version {
         pub major: u8,
         pub minor: u8,
@@ -324,11 +342,11 @@ pub mod fus {
         }
     }
 
-    impl TryFrom<&str> for Version {
-        type Error = CubeProgrammerError;
+    impl std::str::FromStr for Version {
+        type Err = CubeProgrammerError;
 
-        fn try_from(value: &str) -> Result<Self, Self::Error> {
-            let parts = value.split('.');
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            let parts = s.split('.');
 
             if parts.clone().count() == 3 {
                 if let Ok(converted) = parts
@@ -344,13 +362,14 @@ pub mod fus {
             }
 
             Err(CubeProgrammerError::TypeConversion {
-                message: format!("Cannot convert \"{}\" to a version. Expecting the following format \"u8.u8.u8\" e.g. \"1.2.3\"", value),
+                message: format!("Cannot convert \"{}\" to a version. Expecting the following format \"u8.u8.u8\" e.g. \"1.2.3\"", s),
                 source:  crate::error::TypeConversionError::VersionError
             })
         }
     }
 
     #[derive(Copy, Clone, Debug, Default)]
+    /// Information about the FUS. This is read from the target after a successful connection to the FUS
     pub struct Information {
         pub wireless_stack_version: Version,
         pub fus_version: Version,
