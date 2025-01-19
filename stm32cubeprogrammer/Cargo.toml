@@ -20,6 +20,8 @@ ihex = ["dep:ihex"]
 
 # Adds support for input validations (e.g. if a file is indeed a hex file, or it the mcu supports the FUS)
 validations = ["ihex"]
+# Feature to enable tests which require external hardware (probe + target)
+hardware_tests = []
 
 [dependencies]
 stm32cubeprogrammer-sys = { path = "../stm32cubeprogrammer-sys" }
@@ -45,3 +47,4 @@ ihex = { optional = true, version = "3.0" }
 dotenvy.workspace = true
 test-log.workspace = true
 bytemuck = { version = "1.20.0", features = ["derive"] }
+hex = { version = "0.4" }

@@ -3,6 +3,7 @@ use std::str::FromStr;
 #[path = "./test_common.rs"]
 mod test_common;
 
+#[cfg(feature = "hardware_tests")]
 #[test_log::test]
 /// Test upgrading the BLE stack
 fn update_ble_stack() {

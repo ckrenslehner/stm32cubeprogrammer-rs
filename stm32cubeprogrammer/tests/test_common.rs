@@ -1,5 +1,8 @@
 //! Common functions for the tests
 
+#![cfg(feature = "hardware_tests")]
+#![allow(dead_code)]
+
 use std::ffi::OsString;
 
 use stm32cubeprogrammer::{ConnectedFusProgrammer, ConnectedProgrammer, CubeProgrammer, Verbosity};
@@ -31,17 +34,6 @@ impl EnvVar {
     }
 }
 
-/// Get the target directory -> Unfortunately MANIFEST_DIR does not work with cargo workspaces?
-pub fn get_target_dir() -> std::path::PathBuf {
-    let path = std::env::current_dir()
-        .unwrap()
-        .join("..")
-        .join("target")
-        .canonicalize()
-        .unwrap();
-    path
-}
-
 /// Init the CubeProgrammer
 pub fn init_programmer() -> CubeProgrammer {
     dotenvy::dotenv().expect("Failed to load .env file");
@@ -58,20 +50,31 @@ pub fn connect_to_target<'a>(
     protocol: &stm32cubeprogrammer::probe::Protocol,
     connection_parameters: &stm32cubeprogrammer::probe::ConnectionParameters,
 ) -> ConnectedProgrammer<'a> {
-    let probes = programmer.list_available_probes().unwrap();
+    let probes = programmer
+        .list_available_probes()
+        .expect("Failed to list available probes");
 
-    programmer
+    let connected = programmer
         .connect_to_target(&probes[0], protocol, connection_parameters)
-        .unwrap()
+        .expect("Failed to connect to target");
+
+    connected
+        .disable_read_out_protection()
+        .expect("Failed to disable read out protection");
+    connected
 }
 
 pub fn connect_to_target_fus<'a>(
     programmer: &'a CubeProgrammer,
     protocol: &stm32cubeprogrammer::probe::Protocol,
 ) -> ConnectedFusProgrammer<'a> {
-    let probes = programmer.list_available_probes().unwrap();
+    connect_to_target(programmer, protocol, &Default::default());
+
+    let probes = programmer
+        .list_available_probes()
+        .expect("Failed to list available probes");
 
     programmer
         .connect_to_target_fus(&probes[0], protocol)
-        .unwrap()
+        .expect("Failed to connect to target fus")
 }

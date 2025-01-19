@@ -152,7 +152,7 @@ fn main() -> Result<(), anyhow::Error> {
     // Init api
     let display_handler = init_display_handler(options.verbosity.into());
     let api = stm32cubeprogrammer::CubeProgrammer::builder()
-        .cube_programmer_dir(&options.cubeprog_dir)
+        .cube_programmer_dir(&options.stm32_cube_programmer_dir)
         .display_callback(display_handler.clone())
         .build()
         .with_context(|| "Failed to create CubeProgrammer API instance")?;
@@ -238,10 +238,14 @@ fn main() -> Result<(), anyhow::Error> {
                 let fus_programmer = programmer_connection.fus_connection()?;
 
                 let flash = if let Some(stack_version) = ble_stack_info.version {
-                    if fus_programmer.fus_info().fus_version == stack_version {
+                    if fus_programmer.fus_info().wireless_stack_version == stack_version {
                         log::info!("BLE stack is already up to date");
                         false
                     } else {
+                        log::info!(
+                            "Versions not equal. Current BLE stack version: {}",
+                            fus_programmer.fus_info().wireless_stack_version
+                        );
                         log::info!("Updating BLE stack to version {}", stack_version);
                         true
                     }
@@ -310,6 +314,8 @@ fn main() -> Result<(), anyhow::Error> {
                     .with_context(|| "Failed to disable read protection")?;
             }
         }
+
+        display_handler.lock().unwrap().set_finish();
     }
 
     Ok(())

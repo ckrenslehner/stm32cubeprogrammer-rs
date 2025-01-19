@@ -334,11 +334,16 @@ pub mod fus {
         pub major: u8,
         pub minor: u8,
         pub sub: u8,
+        pub r#type: u8,
     }
 
     impl std::fmt::Display for Version {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}.{}.{}", self.major, self.minor, self.sub)
+            write!(
+                f,
+                "{}.{}.{}.{}",
+                self.major, self.minor, self.sub, self.r#type
+            )
         }
     }
 
@@ -357,6 +362,19 @@ pub mod fus {
                         major: converted[0],
                         minor: converted[1],
                         sub: converted[2],
+                        r#type: 0,
+                    });
+                }
+            } else if parts.clone().count() == 4 {
+                if let Ok(converted) = parts
+                    .map(|x| x.parse::<u8>())
+                    .collect::<Result<Vec<u8>, _>>()
+                {
+                    return Ok(Version {
+                        major: converted[0],
+                        minor: converted[1],
+                        sub: converted[2],
+                        r#type: converted[3],
                     });
                 }
             }

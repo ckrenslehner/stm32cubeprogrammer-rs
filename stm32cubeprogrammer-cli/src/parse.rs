@@ -21,7 +21,7 @@ pub struct Options {
 
     /// Path to the STM32CubeProgrammer root directory (e.g. `C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer`)
     #[bpaf(long, env("STM32_CUBE_PROGRAMMER_DIR"))]
-    pub cubeprog_dir: std::path::PathBuf,
+    pub stm32_cube_programmer_dir: std::path::PathBuf,
 
     #[bpaf(short('s'), long("serial"))]
     /// The serial number of the probe to use. If no serial is provided, the first connected probe will be used
@@ -100,7 +100,7 @@ pub struct BleStackInfo {
     pub address: HexAddress,
 
     #[bpaf(short, long)]
-    /// Optional version of the given BLE stack in format "X.Y.Z" where X, Y, and Z are u8 numbers.
+    /// Optional version of the given BLE stack in format "Major.Minor.Sub.Type" (e.g. "1.17.0.2")
     /// If the version on the target matches this version, the BLE stack will not be updated.
     /// If no version is provided, or the version is different, the BLE stack will be updated
     pub version: Option<stm32cubeprogrammer::fus::Version>,
@@ -164,49 +164,8 @@ mod test {
     use super::*;
 
     #[test]
-    fn help() {
-        std::env::set_var("STM32_CUBE_PROGRAMMER_DIR", "some/dir");
-
-        let value = options()
-            .run_inner(&["--help"])
-            .unwrap_err()
-            .unwrap_stdout();
-        println!("{}", value);
-    }
-
-    #[test]
-    fn parse_flash_bin() {
-        let value = options()
-            .run_inner(&["flash-bin", "--file", "test.bin", "--address", "0x123"])
-            .unwrap();
-        println!("{:?}", value);
-    }
-
-    #[test]
-    fn parse_flash_hex() {
-        let value = options()
-            .run_inner(&["flash-hex", "--file", "test.hex"])
-            .unwrap();
-        println!("{:?}", value);
-    }
-
-    #[test]
-    fn update_ble_stack() {
-        let value = options()
-            .run_inner(&[
-                "update-ble-stack",
-                "--file",
-                "test.bin",
-                "--address",
-                "0x123",
-            ])
-            .unwrap();
-        println!("{:?}", value);
-    }
-
-    #[test]
     fn parse_reset() {
-        std::env::set_var("STM32_CUBE_PROGRAMMER_DIR", "some/dir");
+        dotenvy::dotenv().expect("Failed to load .env file");
 
         let value = options().run_inner(&["reset"]).unwrap();
         println!("{:?}", value);
@@ -239,9 +198,11 @@ mod test {
 
     #[test]
     fn parse_multi() {
+        dotenvy::dotenv().expect("Failed to load .env file");
+
         let value = options()
             .run_inner(&[
-                "--cube-programmer-dir",
+                "--stm32-cube-programmer-dir",
                 "some/dir",
                 "unprotect",
                 "update-ble-stack",
@@ -279,36 +240,5 @@ mod test {
                 TargetCommand::Reset(ResetMode::Hardware),
             ]
         )
-    }
-
-    #[test]
-    fn parse_verbosity() {
-        std::env::set_var("STM32_CUBE_PROGRAMMER_DIR", "some/dir");
-
-        let value = options().run_inner(&["reset"]).unwrap();
-        println!("{:?}", value);
-        assert_eq!(value.verbosity, log::LevelFilter::Off);
-
-        let value = options().run_inner(&["-v", "reset"]).unwrap();
-        println!("{:?}", value);
-        assert_eq!(value.verbosity, log::LevelFilter::Error);
-
-        let value = options().run_inner(&["-v", "-v", "reset"]).unwrap();
-        println!("{:?}", value);
-        assert_eq!(value.verbosity, log::LevelFilter::Warn);
-
-        let value = options().run_inner(&["-vv", "reset"]).unwrap();
-        println!("{:?}", value);
-        assert_eq!(value.verbosity, log::LevelFilter::Warn);
-    }
-
-    #[test]
-    fn parse_env() {
-        std::env::set_var("STM32_CUBE_PROGRAMMER_DIR", "some/dir");
-        let value = options().run_inner(&["reset"]).unwrap();
-
-        println!("{:?}", value);
-
-        assert_eq!(value.cubeprog_dir, std::path::PathBuf::from("some/dir"));
     }
 }

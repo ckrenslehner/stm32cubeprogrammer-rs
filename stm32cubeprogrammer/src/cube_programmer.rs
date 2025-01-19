@@ -409,11 +409,14 @@ impl ConnectedProgrammer<'_> {
             const INFO_VERSION_MINOR_MASK: u32 = 0x00ff0000;
             const INFO_VERSION_SUB_OFFSET: u32 = 8;
             const INFO_VERSION_SUB_MASK: u32 = 0x0000ff00;
+            const INFO_VERSION_TYPE_OFFSET: u32 = 0;
+            const INFO_VERSION_TYPE_MASK: u32 = 0x00000000f;
 
             crate::fus::Version {
                 major: ((version & INFO_VERSION_MAJOR_MASK) >> INFO_VERSION_MAJOR_OFFSET) as u8,
                 minor: ((version & INFO_VERSION_MINOR_MASK) >> INFO_VERSION_MINOR_OFFSET) as u8,
                 sub: ((version & INFO_VERSION_SUB_MASK) >> INFO_VERSION_SUB_OFFSET) as u8,
+                r#type: ((version & INFO_VERSION_TYPE_MASK) >> INFO_VERSION_TYPE_OFFSET) as u8,
             }
         }
 
@@ -628,57 +631,6 @@ impl ConnectedProgrammer<'_> {
     fn check_connection(&self) -> CubeProgrammerResult<()> {
         api_types::ReturnCode::<1>::from(unsafe { self.api().checkDeviceConnection() })
             .check(crate::error::Action::CheckConnection)
-    }
-
-    /// Read in bytes from memory
-    ///
-    /// # Arguments
-    /// address: Start address to read from
-    /// count: Number of bytes to read
-    pub fn read_memory_bytes(&self, address: u32, count: usize) -> CubeProgrammerResult<Vec<u8>> {
-        let mut data = std::ptr::null_mut();
-        let size = u32::try_from(count).map_err(|x| CubeProgrammerError::Parameter {
-            action: crate::error::Action::ReadMemory,
-            message: format!("Size exceeds max value: {}", x),
-        })?;
-
-        api_types::ReturnCode::<0>::from(unsafe {
-            self.api().readMemory(address, &mut data, size)
-        })
-        .check(crate::error::Action::ReadMemory)?;
-
-        if data.is_null() {
-            return Err(CubeProgrammerError::ActionOutputUnexpected {
-                action: crate::error::Action::ReadMemory,
-                unexpected_output: crate::error::UnexpectedOutput::Null,
-            });
-        }
-
-        let vec = unsafe { std::slice::from_raw_parts_mut(data, count) }.to_vec();
-
-        unsafe {
-            self.api().freeLibraryMemory(data as *mut std::ffi::c_void);
-        }
-
-        Ok(vec)
-    }
-
-    /// Write memory as bytes
-    ///
-    /// # Arguments
-    /// address: Start address to write to
-    /// data: Data to write
-    pub fn write_memory_bytes(&self, address: u32, data: &[u8]) -> CubeProgrammerResult<()> {
-        let size = u32::try_from(data.len()).map_err(|x| CubeProgrammerError::Parameter {
-            action: crate::error::Action::WriteMemory,
-            message: format!("Size exceeds max value: {}", x),
-        })?;
-
-        api_types::ReturnCode::<0>::from(unsafe {
-            self.api()
-                .writeMemory(address, data.as_ptr() as *mut _, size)
-        })
-        .check(crate::error::Action::WriteMemory)
     }
 
     /// Read memory as struct
