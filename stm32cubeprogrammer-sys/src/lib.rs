@@ -21,6 +21,12 @@ pub const FLASH_BASE_ADDRESS: u32 = 0x08000000;
 /// Standard base address of STM32 RAM
 pub const SRAM_BASE_ADDRESS: u32 = 0x20000000;
 
+/// Base address of SRAM2A stm32wb5x (shared RAM containing FUS info)
+pub const SRAM2A_BASE_ADDRESS_STM32WB5X: u32 = 0x20030000;
+
+/// Base address of SRAM2A stm32wb1x (shared RAM containing FUS info)
+pub const SRAM2A_BASE_ADDRESS_STM32WB1X: u32 = 0x20003000;
+
 #[cfg(windows)]
 pub const PATH_API_LIBRARY_RELATIVE: &str = "api/lib/CubeProgrammer_API.dll";
 

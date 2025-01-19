@@ -13,24 +13,56 @@ pub enum TypeConversionError {
 }
 
 #[derive(Debug, Error, Display)]
+pub enum Action {
+    Connect,
+    ReadTargetInfo,
+    ReadMemory,
+    WriteMemory,
+    StartFus,
+    ReadFusInfo,
+    Reset,
+    DownloadFile,
+    MassErase,
+    SaveMemory,
+    EnableReadOutProtection,
+    DisableReadOutProtection,
+    CheckConnection,
+    UpgradeWirelessStack,
+    DeleteWirelessStack,
+    StartWirelessStack,
+    ListConnectedProbes,
+}
+
+#[derive(Debug, Error, Display)]
+pub enum UnexpectedOutput {
+    Null,
+    SliceConversion,
+    SliceLength,
+}
+
+#[derive(Debug, Error, Display)]
 pub enum CubeProgrammerError {
-    #[display("Command return code error: {}", return_code)]
-    CommandReturnCode {
+    #[display("Action {} failed with return code: {}", action, return_code)]
+    ActionFailed {
+        action: Action,
         return_code: crate::api_types::ErrorCode,
     },
 
-    #[display("Null value error: {}", message)]
-    NullValue {
-        message: String,
+    #[display("Action {} returns unexpected output: {}", action, unexpected_output)]
+    ActionOutputUnexpected {
+        action: Action,
+        unexpected_output: UnexpectedOutput,
     },
 
-    #[display("Operation not supported: {}", message)]
-    NotSupported {
+    #[display("Action {} not supported: {}", action, message)]
+    ActionNotSupported {
+        action: Action,
         message: String,
     },
 
     #[display("Parameter error: {}", message)]
     Parameter {
+        action: Action,
         message: String,
     },
 
@@ -42,10 +74,6 @@ pub enum CubeProgrammerError {
         source: TypeConversionError,
     },
 
-    #[display("Target connection lost")]
-    ConnectionLost,
-
-    #[display("File IO error: {}", _0)]
     FileIo(std::io::Error),
 
     LibLoading(stm32cubeprogrammer_sys::libloading::Error),

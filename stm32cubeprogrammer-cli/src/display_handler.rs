@@ -37,6 +37,10 @@ impl DisplayHandler {
     pub fn set_message(&mut self, message: impl Into<Cow<'static, str>>) {
         self.message = message.into();
     }
+
+    pub fn set_finish(&self) {
+        self.progress_bar.finish();
+    }
 }
 
 /// Implement the display callback trait for the display handler

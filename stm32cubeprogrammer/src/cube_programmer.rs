@@ -1,7 +1,6 @@
 use std::{
     cell::RefCell,
     collections::HashMap,
-    rc::Rc,
     sync::{Arc, Mutex},
 };
 
@@ -16,41 +15,45 @@ use derive_more::Into;
 use log::{debug, error};
 use stm32cubeprogrammer_sys::SRAM_BASE_ADDRESS;
 
+use stm32cubeprogrammer_sys::libloading;
+
+/// HashMap to store connected probes.
+/// The key is the serial number of the probe.
+/// The value is an option of a probe: A probe is only usable for one target connection at a time. If a connection is established, the probe is taken from the hashmap. If a connection is closed, the probe is returned to the hashmap.
 type ProbeRegistry = HashMap<crate::probe::Serial, Option<crate::probe::Probe>>;
 
-/// Struct which holds the FFI API and helps with loading and setting up the CubeProgrammer API
-pub struct CubeProgrammerApi {
+/// Central struct to interact with the underlying CubeProgrammer API library. Factory for connections.
+/// Multiple connections are possible at the same time, if multiple probes are connected.
+pub struct CubeProgrammer {
     /// API
     api: stm32cubeprogrammer_sys::CubeProgrammer_API,
 
-    /// HashMap to store connected probes. The key is the serial number of the probe
-    probe_registry: Rc<RefCell<ProbeRegistry>>,
+    /// Registry of probes
+    probe_registry: RefCell<ProbeRegistry>,
 }
 
-/// ConnectedCubeProgrammer
-/// State transitions:
-/// - ConnectedCubeProgrammer -> CubeProgrammer
-#[derive(Clone)]
-pub struct ConnectedCubeProgrammer<'a> {
-    api: &'a stm32cubeprogrammer_sys::CubeProgrammer_API,
-    probe_registry: Rc<RefCell<ProbeRegistry>>,
+/// Programmer connected to the target which is created via calling [`CubeProgrammer::connect_to_target`] on the CubeProgrammer
+#[derive(Debug)]
+pub struct ConnectedProgrammer<'a> {
+    /// Reference to the CubeProgrammer for api access and reinsertion of the probe into the probe registry
+    programmer: &'a CubeProgrammer,
+    /// Connected probe. The probe is taken from the probe registry and reinserted after the connection is closed
     probe: crate::probe::Probe,
+    /// General information about the connected target which is retrieved after the connection is established
     general_information: api_types::TargetInformation,
 }
 
-/// ConnectedFusCubeProgrammer.
-/// State transitions:
-/// - ConnectedFusCubeProgrammer -> CubeProgrammer
-#[derive(Clone)]
-pub struct ConnectedFusCubeProgrammer<'a> {
-    programmer: ConnectedCubeProgrammer<'a>,
+/// Programmer connected to the target FUS (firmware update service) which is created via calling [`CubeProgrammer::connect_to_target_fus`]
+#[derive(Debug)]
+pub struct ConnectedFusProgrammer<'a> {
+    programmer: ConnectedProgrammer<'a>,
     fus_info: crate::fus::Information,
 }
 
 #[bon]
-impl CubeProgrammerApi {
-    /// Create new instance of CubeProgrammerApi
-    /// - Load the CubeProgrammer API library
+impl CubeProgrammer {
+    /// Create new instance
+    /// - Load the CubeProgrammer API library (sys crate)
     /// - Set the verbosity level
     /// - Set the display callback handler
     /// - Set the loader path
@@ -113,17 +116,22 @@ impl CubeProgrammerApi {
 
         Ok(Self {
             api,
-            probe_registry: Rc::new(RefCell::new(HashMap::new())),
+            probe_registry: RefCell::new(HashMap::new()),
         })
     }
 
-    fn scan_for_probes(&self) {
+    /// Scan for connected probes and sync the probe registry with the scan result
+    /// If a probe is already in use, the related entry is not changed
+    fn scan_for_probes(&self) -> CubeProgrammerResult<()> {
         let mut debug_parameters =
             std::ptr::null_mut::<stm32cubeprogrammer_sys::debugConnectParameters>();
         let return_value = unsafe { self.api.getStLinkList(&mut debug_parameters, 0) };
 
         if return_value < 0 || debug_parameters.is_null() {
-            return;
+            return Err(CubeProgrammerError::ActionOutputUnexpected {
+                action: crate::error::Action::ListConnectedProbes,
+                unexpected_output: crate::error::UnexpectedOutput::Null,
+            });
         }
 
         let slice = unsafe {
@@ -149,22 +157,30 @@ impl CubeProgrammerApi {
         unsafe {
             self.api.deleteInterfaceList();
         }
+
+        Ok(())
     }
 
-    /// List available probes. Scans for probes and then returns the list of probes which are not already in use
-    pub fn list_available_probes(&self) -> Vec<crate::probe::Serial> {
-        self.scan_for_probes();
+    /// List available probes. Scans for connected probes internally and returns the serial numbers of the connected probes which are not currently in use
+    pub fn list_available_probes(&self) -> CubeProgrammerResult<Vec<crate::probe::Serial>> {
+        self.scan_for_probes()?;
 
         let connected_probes = self.probe_registry.borrow();
 
-        connected_probes
+        Ok(connected_probes
             .values()
             .filter_map(|probe| {
                 probe
                     .as_ref()
                     .map(|probe| probe.serial_number().to_string().into())
             })
-            .collect()
+            .collect())
+    }
+
+    /// Insert a probe into the probe registry. Is called in the drop implementation of [`ConnectedProgrammer``]
+    fn insert_probe(&self, probe: &crate::probe::Probe) {
+        let mut connected_probes = self.probe_registry.borrow_mut();
+        connected_probes.insert(probe.serial_number().to_owned().into(), Some(probe.clone()));
     }
 
     /// Connect to a target via a given probe
@@ -173,7 +189,7 @@ impl CubeProgrammerApi {
         probe_serial_number: &crate::probe::Serial,
         protocol: &crate::probe::Protocol,
         connection_parameters: &crate::probe::ConnectionParameters,
-    ) -> CubeProgrammerResult<ConnectedCubeProgrammer> {
+    ) -> CubeProgrammerResult<ConnectedProgrammer> {
         let mut connected_probes = self.probe_registry.borrow_mut();
 
         if let Some(probe) = connected_probes.get_mut(probe_serial_number) {
@@ -186,7 +202,7 @@ impl CubeProgrammerApi {
                         connection_parameters,
                     ))
                 })
-                .check()
+                .check(crate::error::Action::Connect)
                 {
                     Ok(_) => {
                         // Try to get the general device information
@@ -197,8 +213,9 @@ impl CubeProgrammerApi {
 
                             unsafe { self.api.disconnect() };
 
-                            return Err(CubeProgrammerError::NullValue {
-                                message: "Cannot get target device information".to_string(),
+                            return Err(CubeProgrammerError::ActionOutputUnexpected {
+                                action: crate::error::Action::ReadTargetInfo,
+                                unexpected_output: crate::error::UnexpectedOutput::Null,
                             });
                         }
 
@@ -206,10 +223,9 @@ impl CubeProgrammerApi {
                         let general_information =
                             api_types::TargetInformation(unsafe { *general_information });
 
-                        Ok(ConnectedCubeProgrammer {
-                            api: &self.api,
+                        Ok(ConnectedProgrammer {
+                            programmer: &self,
                             probe: inner,
-                            probe_registry: Rc::clone(&self.probe_registry),
                             general_information,
                         })
                     }
@@ -227,6 +243,7 @@ impl CubeProgrammerApi {
                 }
             } else {
                 Err(CubeProgrammerError::Parameter {
+                    action: crate::error::Action::Connect,
                     message: format!(
                         "Probe with serial number {} already in use",
                         probe_serial_number
@@ -235,17 +252,24 @@ impl CubeProgrammerApi {
             }
         } else {
             Err(CubeProgrammerError::Parameter {
+                action: crate::error::Action::Connect,
                 message: format!("Probe with serial number {} not found", probe_serial_number),
             })
         }
     }
 
     /// Connect to the firmware update service (FUS) of a target via a given probe
+    /// No custom connection parameters can be specified, as a special [connection procedure](https://wiki.st.com/stm32mcu/wiki/Connectivity:STM32WB_FUS) is necessary to access the FUS info table:
+    /// - Disconnect
+    /// - Connect (mode: normal ; reset: hardware)
+    /// - Start FUS
+    /// - Disconnect
+    /// - Connect (mode: normal ; reset: hot-plug)
     pub fn connect_to_target_fus(
         &self,
         probe_serial_number: &crate::probe::Serial,
         protocol: &crate::probe::Protocol,
-    ) -> CubeProgrammerResult<ConnectedFusCubeProgrammer> {
+    ) -> CubeProgrammerResult<ConnectedFusProgrammer> {
         // Connect with hardware reset an normal mode
         let connected = self.connect_to_target(
             probe_serial_number,
@@ -257,20 +281,11 @@ impl CubeProgrammerApi {
             },
         )?;
 
-        if !connected.supports_fus() {
-            let target_information = connected.target_information().clone();
-            connected.disconnect();
-
-            return Err(CubeProgrammerError::NotSupported {
-                message: format!(
-                    "FUS not supported by connected target series: {}",
-                    target_information.series()
-                ),
-            });
-        }
+        connected.check_fus_support()?;
 
         // Start the FUS
-        api_types::ReturnCode::<1>::from(unsafe { connected.api.startFus() }).check()?;
+        api_types::ReturnCode::<1>::from(unsafe { connected.api().startFus() })
+            .check(crate::error::Action::StartFus)?;
 
         // Disconnect
         connected.disconnect();
@@ -289,7 +304,7 @@ impl CubeProgrammerApi {
         // Read the FUS information
         let fus_info = connected.read_fus_info()?;
 
-        Ok(ConnectedFusCubeProgrammer {
+        Ok(ConnectedFusProgrammer {
             programmer: connected,
             fus_info,
         })
@@ -298,19 +313,11 @@ impl CubeProgrammerApi {
     /// Load the dynamic library with libloading
     fn load_library(
         api_library_path: impl AsRef<std::ffi::OsStr>,
-    ) -> Result<
-        stm32cubeprogrammer_sys::libloading::Library,
-        stm32cubeprogrammer_sys::libloading::Error,
-    > {
+    ) -> Result<libloading::Library, libloading::Error> {
         #[cfg(windows)]
         unsafe fn load_inner(
             path: impl AsRef<std::ffi::OsStr>,
-        ) -> Result<
-            stm32cubeprogrammer_sys::libloading::Library,
-            stm32cubeprogrammer_sys::libloading::Error,
-        > {
-            use stm32cubeprogrammer_sys::libloading;
-
+        ) -> Result<libloading::Library, libloading::Error> {
             let library: libloading::Library = unsafe {
                 libloading::os::windows::Library::load_with_flags(
                     path,
@@ -328,6 +335,8 @@ impl CubeProgrammerApi {
         unsafe fn load_inner(
             path: impl AsRef<std::ffi::OsStr>,
         ) -> Result<libloading::Library, libloading::Error> {
+            use stm32cubeprogrammer_sys::libloading;
+
             let library: libloading::Library =
                 unsafe { libloading::os::unix::Library::new(path)?.into() };
 
@@ -338,29 +347,24 @@ impl CubeProgrammerApi {
     }
 }
 
-impl std::fmt::Debug for CubeProgrammerApi {
+impl std::fmt::Debug for CubeProgrammer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CubeProgrammerApi").finish_non_exhaustive()
     }
 }
 
-impl Drop for ConnectedCubeProgrammer<'_> {
+impl Drop for ConnectedProgrammer<'_> {
     /// Disconnect and re-insert the probe into the probe registry of the api
     fn drop(&mut self) {
         unsafe {
-            self.api.disconnect();
+            self.api().disconnect();
         }
 
-        // Re-insert probe into probe registry
-        let mut registry = self.probe_registry.borrow_mut();
-        registry.insert(
-            self.probe.serial_number().to_owned().into(),
-            Some(self.probe.clone()),
-        );
+        self.programmer.insert_probe(&self.probe);
     }
 }
 
-impl ConnectedCubeProgrammer<'_> {
+impl ConnectedProgrammer<'_> {
     /// Disconnect from target
     pub fn disconnect(self) {
         // Consume self -> Drop is called to disconnect
@@ -372,23 +376,32 @@ impl ConnectedCubeProgrammer<'_> {
     }
 
     /// Check if the connected target supports the firmware update service (FUS)
-    fn supports_fus(&self) -> bool {
+    pub fn fus_support(&self) -> bool {
         // TODO: Add support for wb1x
         self.general_information.name().eq("STM32WB5x/35xx")
     }
 
+    fn api(&self) -> &stm32cubeprogrammer_sys::CubeProgrammer_API {
+        &self.programmer.api
+    }
+
+    fn check_fus_support(&self) -> CubeProgrammerResult<()> {
+        if !self.fus_support() {
+            return Err(CubeProgrammerError::ActionNotSupported {
+                action: crate::error::Action::StartFus,
+                message: format!(
+                    "Connection target {} does not support FUS",
+                    self.general_information.name()
+                ),
+            });
+        }
+
+        Ok(())
+    }
+
     /// Reads the firmware update service (FUS) information from the shared SRAM2A
-    /// To read the device info table the following procedure needs to be followed ([source](https://wiki.st.com/stm32mcu/wiki/Connectivity:STM32WB_FUS)):
-    /// - Disconnect
-    /// - Connect (mode: normal ; reset: hardware)
-    /// - Start FUS
-    /// - Disconnect
-    /// - Connect (mode: normal ; reset: hot-plug)
-    /// - Read the device info table
-    ///
-    /// The connect/disconnect procedure above needs to be performed before calling this function
     fn read_fus_info(&self) -> CubeProgrammerResult<crate::fus::Information> {
-        /// Helper function to convert the version word to major, minor, sub
+        /// Helper function to convert the version word to major, minor, subs
         fn u32_to_version(version: u32) -> crate::fus::Version {
             const INFO_VERSION_MAJOR_OFFSET: u32 = 24;
             const INFO_VERSION_MAJOR_MASK: u32 = 0xff000000;
@@ -396,72 +409,81 @@ impl ConnectedCubeProgrammer<'_> {
             const INFO_VERSION_MINOR_MASK: u32 = 0x00ff0000;
             const INFO_VERSION_SUB_OFFSET: u32 = 8;
             const INFO_VERSION_SUB_MASK: u32 = 0x0000ff00;
+            const INFO_VERSION_TYPE_OFFSET: u32 = 0;
+            const INFO_VERSION_TYPE_MASK: u32 = 0x00000000f;
 
             crate::fus::Version {
                 major: ((version & INFO_VERSION_MAJOR_MASK) >> INFO_VERSION_MAJOR_OFFSET) as u8,
                 minor: ((version & INFO_VERSION_MINOR_MASK) >> INFO_VERSION_MINOR_OFFSET) as u8,
                 sub: ((version & INFO_VERSION_SUB_MASK) >> INFO_VERSION_SUB_OFFSET) as u8,
+                r#type: ((version & INFO_VERSION_TYPE_MASK) >> INFO_VERSION_TYPE_OFFSET) as u8,
             }
         }
+
+        /// Offsets of the FUS device info table fields
+        const DEVICE_INFO_TABLE_STATE_OFFSET: u32 = 0;
+        // const RESERVED1_OFFSET: u32 = 4;
+        // const LAST_FUS_ACTIVE_STATE_OFFSET: u32 = 5;
+        // const LAST_WIRELESS_STACK_STATE_OFFSET: u32 = 6;
+        // const CURRENT_WIRELESS_STACK_TYPE_OFFSET: u32 = 7;
+        // const SAFE_BOOT_VERSION_OFFSET: u32 = 8;
+        const FUS_VERSION_OFFSET: u32 = 12;
+        // const FUS_MEMORY_SIZE_OFFSET: u32 = 16;
+        const WIRELESS_STACK_VERSION_OFFSET: u32 = 20;
+        // const WIRELESS_STACK_MEMORY_SIZE_OFFSET: u32 = 24;
+        // const WIRELESS_FIRMWARE_BLE_INFO_OFFSET: u32 = 28;
+        // const WIRELESS_FIRMWARE_THREAD_INFO_OFFSET: u32 = 32;
+        // const RESERVED2_OFFSET: u32 = 36;
+        const UID64_OFFSET: u32 = 40;
+        const DEVICE_ID_OFFSET: u32 = 48;
 
         /// Keyword to check if the FUS device info table is valid
         const FUS_DEVICE_INFO_TABLE_VALIDITY_KEYWORD: u32 = 0xA94656B9;
         /// Offset of the shared RAM
-        /// TODO: Add support for WB1
         const SRAM2A_BASE_ADDRESS: u32 = SRAM_BASE_ADDRESS + 0x00030000;
-
-        /// FUS device info table struct
-        /// Ported to rust from `STM32_WPAN/interface/patterns/ble_thread/tl/mbox_def.h`
-        #[repr(C, packed)]
-        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Debug)]
-        struct MBFusDeviceInfoTable {
-            /// Needs to be equal to `FUS_DEVICE_INFO_TABLE_VALIDITY_KEYWORD` for the table to be valid
-            device_info_table_state: u32,
-            reserved1: u8,
-            last_fus_active_state: u8,
-            last_wireless_stack_state: u8,
-            current_wireless_stack_type: u8,
-            safe_boot_version: u32,
-            fus_version: u32,
-            fus_memory_size: u32,
-            wireless_stack_version: u32,
-            wireless_stack_memory_size: u32,
-            wireless_firmware_ble_info: u32,
-            wireless_firmware_thread_info: u32,
-            reserved2: u32,
-            uid64: u64,
-            device_id: u16,
-        }
 
         let info_table_address = self.read_memory::<u32>(SRAM2A_BASE_ADDRESS, 1)?[0];
 
         if info_table_address == 0 {
-            return Err(CubeProgrammerError::NullValue {
-                message: "The FUS device info table address is null".to_string(),
+            return Err(CubeProgrammerError::ActionOutputUnexpected {
+                action: crate::error::Action::ReadFusInfo,
+                unexpected_output: crate::error::UnexpectedOutput::Null,
             });
         }
 
-        let info_table = self.read_memory::<MBFusDeviceInfoTable>(info_table_address, 1)?[0];
+        let device_info_table_state =
+            self.read_memory::<u32>(info_table_address + DEVICE_INFO_TABLE_STATE_OFFSET, 1)?[0];
 
-        if info_table.device_info_table_state != FUS_DEVICE_INFO_TABLE_VALIDITY_KEYWORD {
+        let fus_version = self.read_memory::<u32>(info_table_address + FUS_VERSION_OFFSET, 1)?[0];
+
+        let wireless_stack_version =
+            self.read_memory::<u32>(info_table_address + WIRELESS_STACK_VERSION_OFFSET, 1)?[0];
+
+        let uid64 = self.read_memory::<u64>(info_table_address + UID64_OFFSET, 1)?[0];
+
+        let device_id = self.read_memory::<u16>(info_table_address + DEVICE_ID_OFFSET, 1)?[0];
+
+        if device_info_table_state != FUS_DEVICE_INFO_TABLE_VALIDITY_KEYWORD {
             error!("Read FUS info table is not valid. Return default FUS info");
-            return Err(CubeProgrammerError::NullValue {
-                message: "The FUS device info table data is not present".to_string(),
+            return Err(CubeProgrammerError::ActionOutputUnexpected {
+                action: crate::error::Action::ReadFusInfo,
+                unexpected_output: crate::error::UnexpectedOutput::Null,
             });
         }
 
         Ok(crate::fus::Information {
-            fus_version: u32_to_version(info_table.fus_version),
-            wireless_stack_version: u32_to_version(info_table.wireless_stack_version),
-            device_id: info_table.device_id,
-            uid64: info_table.uid64,
+            fus_version: u32_to_version(fus_version),
+            wireless_stack_version: u32_to_version(wireless_stack_version),
+            device_id: device_id,
+            uid64: uid64,
         })
     }
 
     /// Reset target
     pub fn reset_target(&self, reset_mode: crate::probe::ResetMode) -> CubeProgrammerResult<()> {
         self.check_connection()?;
-        api_types::ReturnCode::<0>::from(unsafe { self.api.reset(reset_mode.into()) }).check()
+        api_types::ReturnCode::<0>::from(unsafe { self.api().reset(reset_mode.into()) })
+            .check(crate::error::Action::Reset)
     }
 
     /// Download hex file to target
@@ -479,6 +501,7 @@ impl ConnectedCubeProgrammer<'_> {
             let file_content = std::fs::read(&file_path).map_err(CubeProgrammerError::FileIo)?;
             let file_content =
                 std::str::from_utf8(&file_content).map_err(|_| CubeProgrammerError::Parameter {
+                    action: crate::error::Action::DownloadFile,
                     message: "Invalid intelhex file".to_string(),
                 })?;
 
@@ -495,6 +518,7 @@ impl ConnectedCubeProgrammer<'_> {
                     Ok(_) => {}
                     Err(e) => {
                         return Err(CubeProgrammerError::Parameter {
+                            action: crate::error::Action::DownloadFile,
                             message: format!("Invalid intelhex file: {}", e),
                         });
                     }
@@ -507,7 +531,7 @@ impl ConnectedCubeProgrammer<'_> {
         let file_path = utility::path_to_widestring(file_path);
 
         api_types::ReturnCode::<0>::from(unsafe {
-            self.api.downloadFile(
+            self.api().downloadFile(
                 file_path?.as_ptr(),
                 0,
                 if skip_erase { 1 } else { 0 },
@@ -515,7 +539,7 @@ impl ConnectedCubeProgrammer<'_> {
                 std::ptr::null(),
             )
         })
-        .check()
+        .check(crate::error::Action::DownloadFile)
     }
 
     /// Download binary file to target
@@ -531,7 +555,7 @@ impl ConnectedCubeProgrammer<'_> {
         let file_path = utility::path_to_widestring(file_path);
 
         api_types::ReturnCode::<0>::from(unsafe {
-            self.api.downloadFile(
+            self.api().downloadFile(
                 file_path?.as_ptr(),
                 start_address,
                 if skip_erase { 1 } else { 0 },
@@ -539,20 +563,20 @@ impl ConnectedCubeProgrammer<'_> {
                 std::ptr::null(),
             )
         })
-        .check()
+        .check(crate::error::Action::DownloadFile)
     }
 
     /// Perform mass erase
     pub fn mass_erase(&self) -> CubeProgrammerResult<()> {
         self.check_connection()?;
 
-        api_types::ReturnCode::<0>::from(unsafe { self.api.massErase(std::ptr::null_mut()) })
-            .check()
+        api_types::ReturnCode::<0>::from(unsafe { self.api().massErase(std::ptr::null_mut()) })
+            .check(crate::error::Action::MassErase)
     }
 
     /// Save memory to file
     /// Attention: The file path must end with .hex or .bin
-    pub fn save_memory_file(
+    pub fn save_memory(
         &self,
         file_path: impl AsRef<std::path::Path>,
         start_address: u32,
@@ -561,17 +585,19 @@ impl ConnectedCubeProgrammer<'_> {
         self.check_connection()?;
 
         api_types::ReturnCode::<0>::from(unsafe {
-            self.api.saveMemoryToFile(
+            self.api().saveMemoryToFile(
                 i32::try_from(start_address).map_err(|x| CubeProgrammerError::Parameter {
+                    action: crate::error::Action::SaveMemory,
                     message: format!("Start address exceeds max value: {}", x),
                 })?,
                 i32::try_from(size_bytes).map_err(|x| CubeProgrammerError::Parameter {
+                    action: crate::error::Action::SaveMemory,
                     message: format!("Size exceeds max value: {}", x),
                 })?,
                 utility::path_to_widestring(file_path)?.as_ptr(),
             )
         })
-        .check()
+        .check(crate::error::Action::SaveMemory)
     }
 
     /// Enable roud out protection level 1 (0xBB)
@@ -582,19 +608,20 @@ impl ConnectedCubeProgrammer<'_> {
         self.check_connection()?;
 
         api_types::ReturnCode::<0>::from(unsafe {
-            self.api.sendOptionBytesCmd(
+            self.api().sendOptionBytesCmd(
                 utility::string_to_cstring(COMMAND_ENABLE_ROP_LEVEL_1)?.as_ptr()
                     as *mut std::ffi::c_char,
             )
         })
-        .check()
+        .check(crate::error::Action::EnableReadOutProtection)
     }
 
     /// Disable read out protection
     /// Attention: This command will eOrase the device memory
     pub fn disable_read_out_protection(&self) -> CubeProgrammerResult<()> {
         self.check_connection()?;
-        api_types::ReturnCode::<0>::from(unsafe { self.api.readUnprotect() }).check()?;
+        api_types::ReturnCode::<0>::from(unsafe { self.api().readUnprotect() })
+            .check(crate::error::Action::DisableReadOutProtection)?;
         Ok(())
     }
 
@@ -602,54 +629,8 @@ impl ConnectedCubeProgrammer<'_> {
     /// Consumes self and and only returns self if the connection is still maintained
     /// If the connection is lost, the user is forced to reconnect
     fn check_connection(&self) -> CubeProgrammerResult<()> {
-        api_types::ReturnCode::<1>::from(unsafe { self.api.checkDeviceConnection() })
-            .check()
-            .map_err(|_| CubeProgrammerError::ConnectionLost)
-    }
-
-    /// Read in bytes from memory
-    ///
-    /// # Arguments
-    /// address: Start address to read from
-    /// count: Number of bytes to read
-    pub fn read_memory_bytes(&self, address: u32, count: usize) -> CubeProgrammerResult<Vec<u8>> {
-        let mut data = std::ptr::null_mut();
-        let size = u32::try_from(count).map_err(|x| CubeProgrammerError::Parameter {
-            message: format!("Size exceeds max value: {}", x),
-        })?;
-
-        api_types::ReturnCode::<0>::from(unsafe { self.api.readMemory(address, &mut data, size) })
-            .check()?;
-
-        if data.is_null() {
-            return Err(CubeProgrammerError::NullValue {
-                message: "Read memory returned null".to_string(),
-            });
-        }
-
-        let vec = unsafe { std::slice::from_raw_parts_mut(data, count) }.to_vec();
-
-        unsafe {
-            self.api.freeLibraryMemory(data as *mut std::ffi::c_void);
-        }
-
-        Ok(vec)
-    }
-
-    /// Write memory as bytes
-    ///
-    /// # Arguments
-    /// address: Start address to write to
-    /// data: Data to write
-    pub fn write_memory_bytes(&self, address: u32, data: &[u8]) -> CubeProgrammerResult<()> {
-        let size = u32::try_from(data.len()).map_err(|x| CubeProgrammerError::Parameter {
-            message: format!("Size exceeds max value: {}", x),
-        })?;
-
-        api_types::ReturnCode::<0>::from(unsafe {
-            self.api.writeMemory(address, data.as_ptr() as *mut _, size)
-        })
-        .check()
+        api_types::ReturnCode::<1>::from(unsafe { self.api().checkDeviceConnection() })
+            .check(crate::error::Action::CheckConnection)
     }
 
     /// Read memory as struct
@@ -669,39 +650,43 @@ impl ConnectedCubeProgrammer<'_> {
     ) -> CubeProgrammerResult<Vec<T>> {
         let size = u32::try_from(std::mem::size_of::<T>() * count).map_err(|x| {
             CubeProgrammerError::Parameter {
+                action: crate::error::Action::ReadMemory,
                 message: format!("Size exceeds max value: {}", x),
             }
         })?;
 
         let mut data = std::ptr::null_mut();
 
-        api_types::ReturnCode::<0>::from(unsafe { self.api.readMemory(address, &mut data, size) })
-            .check()?;
+        api_types::ReturnCode::<0>::from(unsafe {
+            self.api().readMemory(address, &mut data, size)
+        })
+        .check(crate::error::Action::ReadMemory)?;
 
         if data.is_null() {
-            return Err(CubeProgrammerError::NullValue {
-                message: "Read memory returned null".to_string(),
+            return Err(CubeProgrammerError::ActionOutputUnexpected {
+                action: crate::error::Action::ReadMemory,
+                unexpected_output: crate::error::UnexpectedOutput::Null,
             });
         }
 
         let pod_data: &[T] =
             bytemuck::try_cast_slice(unsafe { std::slice::from_raw_parts(data, size as _) })
-                .map_err(|x| CubeProgrammerError::TypeConversion {
-                    message: format!("Failed to convert bytes to struct: {x}"),
-                    source: crate::error::TypeConversionError::BytemuckError,
+                .map_err(|_| CubeProgrammerError::ActionOutputUnexpected {
+                    action: crate::error::Action::ReadMemory,
+                    unexpected_output: crate::error::UnexpectedOutput::SliceConversion,
                 })?;
 
         let pod_data = pod_data.to_vec();
 
-        if pod_data.len() != count {
-            return Err(CubeProgrammerError::TypeConversion {
-                message: "Unexpected number of elements in vector".to_string(),
-                source: crate::error::TypeConversionError::BytemuckError,
-            });
+        unsafe {
+            self.api().freeLibraryMemory(data as *mut std::ffi::c_void);
         }
 
-        unsafe {
-            self.api.freeLibraryMemory(data as *mut std::ffi::c_void);
+        if pod_data.len() != count {
+            return Err(CubeProgrammerError::ActionOutputUnexpected {
+                action: crate::error::Action::ReadMemory,
+                unexpected_output: crate::error::UnexpectedOutput::SliceLength,
+            });
         }
 
         Ok(pod_data)
@@ -722,8 +707,9 @@ impl ConnectedCubeProgrammer<'_> {
         address: u32,
         data: &[T],
     ) -> CubeProgrammerResult<()> {
-        let size = u32::try_from(data.len() * std::mem::size_of::<T>()).map_err(|x| {
+        let size = u32::try_from(std::mem::size_of_val(data)).map_err(|x| {
             CubeProgrammerError::Parameter {
+                action: crate::error::Action::WriteMemory,
                 message: format!("Size exceeds max value: {}", x),
             }
         })?;
@@ -734,35 +720,32 @@ impl ConnectedCubeProgrammer<'_> {
             .collect::<Vec<_>>();
 
         api_types::ReturnCode::<0>::from(unsafe {
-            self.api
+            self.api()
                 .writeMemory(address, bytes.as_mut_ptr() as *mut i8, size)
         })
-        .check()
+        .check(crate::error::Action::WriteMemory)
     }
 
     /// Start the wireless stack
     pub fn start_wireless_stack(&self) -> CubeProgrammerResult<()> {
-        if !self.supports_fus() {
-            return Err(CubeProgrammerError::NotSupported {
-                message: "Starting the wireless stack is not supported by the connected target"
-                    .to_string(),
-            });
-        }
+        self.check_fus_support()?;
 
-        api_types::ReturnCode::<1>::from(unsafe { self.api.startWirelessStack() }).check()
+        api_types::ReturnCode::<1>::from(unsafe { self.api().startWirelessStack() })
+            .check(crate::error::Action::StartWirelessStack)
     }
 }
 
-impl ConnectedFusCubeProgrammer<'_> {
+impl ConnectedFusProgrammer<'_> {
     pub fn fus_info(&self) -> &crate::fus::Information {
         &self.fus_info
     }
 
-    pub fn delete_ble_stack(&self) -> CubeProgrammerResult<()> {
-        api_types::ReturnCode::<1>::from(unsafe { self.programmer.api.firmwareDelete() }).check()
+    pub fn delete_wireless_stack(&self) -> CubeProgrammerResult<()> {
+        api_types::ReturnCode::<1>::from(unsafe { self.programmer.api().firmwareDelete() })
+            .check(crate::error::Action::DeleteWirelessStack)
     }
 
-    pub fn update_ble_stack(
+    pub fn upgrade_wireless_stack(
         &self,
         file_path: impl AsRef<std::path::Path>,
         start_address: u32,
@@ -773,7 +756,7 @@ impl ConnectedFusCubeProgrammer<'_> {
         self.programmer.check_connection()?;
 
         api_types::ReturnCode::<1>::from(unsafe {
-            self.programmer.api.firmwareUpgrade(
+            self.programmer.api().firmwareUpgrade(
                 utility::path_to_widestring(file_path)?.as_ptr(),
                 start_address,
                 if first_install { 1 } else { 0 },
@@ -781,7 +764,7 @@ impl ConnectedFusCubeProgrammer<'_> {
                 if start_stack_after_update { 1 } else { 0 },
             )
         })
-        .check()
+        .check(crate::error::Action::UpgradeWirelessStack)
     }
 
     pub fn start_wireless_stack(&self) -> CubeProgrammerResult<()> {
