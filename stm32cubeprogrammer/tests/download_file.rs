@@ -1,9 +1,9 @@
+#![cfg(feature = "hardware_tests")]
 use std::str::FromStr;
 
 #[path = "./test_common.rs"]
 mod test_common;
 
-#[cfg(feature = "hardware_tests")]
 #[test_log::test]
 /// Test flashing a hex file and a bin file to the target
 fn download_files() {

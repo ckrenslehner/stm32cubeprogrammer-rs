@@ -1,7 +1,8 @@
+#![cfg(feature = "hardware_tests")]
+
 #[path = "./test_common.rs"]
 mod test_common;
 
-#[cfg(feature = "hardware_tests")]
 #[test_log::test]
 /// Test reading and writing memory on the target using a custom data structure which implements [`bytemuck::Pod`] and [`bytemuck::Zeroable`]
 fn read_and_write_memory() {

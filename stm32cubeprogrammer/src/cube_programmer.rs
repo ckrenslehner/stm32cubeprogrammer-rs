@@ -224,7 +224,7 @@ impl CubeProgrammer {
                             api_types::TargetInformation(unsafe { *general_information });
 
                         Ok(ConnectedProgrammer {
-                            programmer: &self,
+                            programmer: self,
                             probe: inner,
                             general_information,
                         })
@@ -474,8 +474,8 @@ impl ConnectedProgrammer<'_> {
         Ok(crate::fus::Information {
             fus_version: u32_to_version(fus_version),
             wireless_stack_version: u32_to_version(wireless_stack_version),
-            device_id: device_id,
-            uid64: uid64,
+            device_id,
+            uid64,
         })
     }
 

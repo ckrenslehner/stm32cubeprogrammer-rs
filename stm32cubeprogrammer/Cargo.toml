@@ -3,10 +3,12 @@ name = "stm32cubeprogrammer"
 version = "0.1.0"
 edition = "2021"
 
-authors = ["Christian Krenslehner"]
+authors = ["Christian Krenslehner <ckrenslehner@gmail.com>"]
 description = "Rust bindings for the STM32CubeProgrammer API"
 license = "MIT"
 repository = "https://github.com/ckrenslehner/stm32cubeprogrammer-rs"
+keywords = ["stm32", "cube", "programmer", "api"]
+categories = ["stm32", "embedded-systems"]
 
 [package.metadata]
 # std::sync::OnceLock is available since 1.70
