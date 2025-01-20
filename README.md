@@ -5,8 +5,8 @@ These parts are represented by the following crates:
 - `stm32cubeprogrammer`: Safe rust interface around the sys crate
 - `stm32cubeprogrammer-cli`: Command line interface which uses `stm32cubeprogrammer` as a library
 
-## Preequisites
-There needs to be a Stm32CubeProgrammer installation on your system. The crates are tested using version 2.18.0.
+## Requirements
+There needs to be a Stm32CubeProgrammer installation on your system. The crates are tested using Stm32CubeProgrammer version 2.18.0.
 
 ## Platform support
 Windows and Linux are both supported.

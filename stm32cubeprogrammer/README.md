@@ -2,7 +2,7 @@
 
 This crate provides a high-level rust API for the STM32CubeProgrammer DLL.
 
-Example usage:
+## Example usage:
 ```rust
 use stm32cubeprogrammer::{
     probe::{ConnectionParameters, Protocol, ResetMode},
@@ -52,8 +52,9 @@ let connected = programmer
 
 println!("FUS information: {}", connected.fus_info());
 ```
+More examples can be found in the `tests` directory.
 
-### Supported features:
+## Supported features:
 - Downloading files as hex or bin
 - Reading and writing memory
     - Uses the [`bytemuck::Pod`](https://docs.rs/bytemuck/1.21.0/bytemuck/trait.Pod.html) trait for reading and writing data from/to memory
@@ -66,10 +67,7 @@ println!("FUS information: {}", connected.fus_info());
 
 If there is a feature missing, feel free to open an issue or a pull request. :smile:
 
-### Examples
-You can find more examples in the `tests` directory. An example for using the library as part of a project is the [`stm32cubeprogrammer-cli`]
-
-### Running the tests
+## Running the tests
 The tests require a STM32CubeProgrammer installation on the host machine and a connected st-link probe with a target.
 To run the tests add a `.env` which at least contains the path to the STM32CubeProgrammer installation directory:
 ```env
@@ -77,14 +75,17 @@ STM32_CUBE_PROGRAMMER_DIR="C:\\Program Files\\STMicroelectronics\\STM32Cube\\STM
 ```
 A list of the expected environment variables can be found in the `test_common.rs` file.
 
-### Other crates similar to this one
+## Other crates similar to this one
 When I was looking for a rust API for the STM32CubeProgrammer DLL, I found [this](https://github.com/wervin/stm32cubeprog-rs) crate.
 Playing around with it, I got interested in the topic and decided to try writing my own version. :rocket:
 
-### Platform support
+## Requirements
+There needs to be a Stm32CubeProgrammer installation on your system. The crates are tested using Stm32CubeProgrammer version 2.18.0.
+
+## Platform support
 Windows and Linux are supported and tested.
 
-### Warranty
+## Warranty
 This crate is supplied as is without any warranty. Use at your own risk.
 
 License: MIT
