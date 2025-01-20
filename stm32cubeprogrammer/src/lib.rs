@@ -70,8 +70,8 @@
 //! ## Running the tests
 //! The tests require a STM32CubeProgrammer installation on the host machine and a connected st-link probe with a target.
 //! To run the tests add a `.env` which at least contains the path to the STM32CubeProgrammer installation directory:
-//! ```ignore
-//! STM32_CUBE_PROGRAMMER_DIR=C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer
+//! ```env
+//! STM32_CUBE_PROGRAMMER_DIR="C:\\Program Files\\STMicroelectronics\\STM32Cube\\STM32CubeProgrammer"
 //! ```
 //! A list of the expected environment variables can be found in the `test_common.rs` file.
 //!
