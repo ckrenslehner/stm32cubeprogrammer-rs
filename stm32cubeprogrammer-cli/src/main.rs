@@ -7,9 +7,9 @@
 //! - Enabling read protection
 //! - Disabling read protection
 //! - Resetting target
-//! 
+//!
 //! All commands above can be combined in a single command line invocation by chaining them.
-//! 
+//!
 //! If you need other commands, feel free to open an issue or a pull request. :smile:
 //!
 //! # Example usage:
@@ -28,7 +28,7 @@
 //! ```sh
 //! STM32_CUBE_PROGRAMMER_DIR=`installation_dir` stm32cubeprogrammer-cli unprotect reset flash-hex `path_to_hex_file` protect
 //! ```
-//! 
+//!
 //! Use the `--list` flag to list available probes.
 //! ```sh
 //! stm32cubeprogrammer-cli --stm32-cube-programmer-dir `installation_dir` --list

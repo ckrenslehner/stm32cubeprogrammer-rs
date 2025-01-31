@@ -165,7 +165,7 @@ mod test {
 
     #[test]
     fn parse_reset() {
-        dotenvy::dotenv().expect("Failed to load .env file");
+        std::env::set_var("STM32_CUBE_PROGRAMMER_DIR", "some/dir");
 
         let value = options().run_inner(&["reset"]).unwrap();
         println!("{:?}", value);
@@ -198,8 +198,6 @@ mod test {
 
     #[test]
     fn parse_multi() {
-        dotenvy::dotenv().expect("Failed to load .env file");
-
         let value = options()
             .run_inner(&[
                 "--stm32-cube-programmer-dir",

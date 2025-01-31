@@ -1,0 +1,6 @@
+[files]
+extend-exclude = [
+    "stm32cubeprogrammer-sys/include",
+    "stm32cubeprogrammer-sys/src/bindings_unix.rs",
+    "stm32cubeprogrammer-sys/src/bindings_windows.rs",
+]
