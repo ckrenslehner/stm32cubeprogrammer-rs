@@ -31,6 +31,8 @@ pub enum Action {
     DeleteWirelessStack,
     StartWirelessStack,
     ListConnectedProbes,
+    WriteCoreRegister,
+    ReadCoreRegister,
 }
 
 #[derive(Debug, Error, Display)]

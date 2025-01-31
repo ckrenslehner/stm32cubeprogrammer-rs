@@ -10,7 +10,7 @@
 include!("bindings_windows.rs");
 
 #[cfg(unix)]
-include!("bindings_unix.rs");
+include!("bindings_linux.rs");
 
 // Re-export libloading so that the user doesn't have to depend on it
 pub use libloading;
