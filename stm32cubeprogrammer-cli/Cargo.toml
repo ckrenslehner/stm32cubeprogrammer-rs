@@ -8,7 +8,7 @@ description = "CLI for the STM32CubeProgrammer API"
 license = "MIT"
 repository = "https://github.com/ckrenslehner/stm32cubeprogrammer-rs"
 keywords = ["stm32", "cube", "programmer", "cli"]
-categories = ["command-line-utilities", "stm32", "embedded-systems"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 bpaf = { version = "0.9", features = ["derive"] }

@@ -8,7 +8,7 @@ description = "Rust bindings for the STM32CubeProgrammer API"
 license = "MIT"
 repository = "https://github.com/ckrenslehner/stm32cubeprogrammer-rs"
 keywords = ["stm32", "cube", "programmer", "api"]
-categories = ["stm32", "embedded-systems"]
+categories = ["api-bindings"]
 
 [package.metadata]
 # std::sync::OnceLock is available since 1.70
