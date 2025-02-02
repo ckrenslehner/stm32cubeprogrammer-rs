@@ -1,6 +1,5 @@
 use serde::Serialize;
 use std::env::ArgsOs;
-use stm32cubeprogrammer::cube_programmer;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,11 +41,11 @@ impl Output {
     }
 
     /// Add information about the connected target
-    pub fn add_target_information(
+    pub fn add_general_information(
         &mut self,
-        target_information: &stm32cubeprogrammer::api_types::GeneralInformation,
+        general_information: &stm32cubeprogrammer::api_types::GeneralInformation,
     ) {
-        self.general_information = Some(target_information.clone());
+        self.general_information = Some(general_information.clone());
     }
 
     /// Add list of connected probes

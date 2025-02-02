@@ -29,14 +29,14 @@ let connected = programmer
     .connect_to_target(&probes[0], &Protocol::Swd, &ConnectionParameters::default())
     .expect("Failed to connect to target");
 
-println!("Target information: {}", connected.target_information());
+println!("Target information: {}", connected.general_information());
 
 // If there are multiple connected probes with a target, you can establish multiple connections simultaneously
 let connected_other = programmer
     .connect_to_target(&probes[1], &Protocol::Swd, &ConnectionParameters::default())
     .expect("Failed to connect to target");
 
-println!("Other target information: {}", connected_other.target_information());
+println!("Other target information: {}", connected_other.general_information());
 
 connected
     .reset_target(ResetMode::Hardware)

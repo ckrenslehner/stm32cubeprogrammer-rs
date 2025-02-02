@@ -249,7 +249,7 @@ fn main_inner() -> Result<crate::output::Output, anyhow::Error> {
         ProgrammerConnection::new(&api, selected_probe, options.protocol.into());
 
     // Connect to the target and add target information to the output
-    cli_output.add_target_information(
+    cli_output.add_general_information(
         programmer_connection
             .connection()
             .map_err(|x| {
@@ -376,7 +376,7 @@ fn main_inner() -> Result<crate::output::Output, anyhow::Error> {
                     .start_wireless_stack()
                     .with_context(|| "Failed to start BLE stack")?;
 
-                output::CommandOutput::BleStackInfo(fus_programmer.fus_info().clone())
+                output::CommandOutput::BleStackInfo(*fus_programmer.fus_info())
             }
             parse::TargetCommand::Reset(reset_mode) => {
                 log::info!("Resetting target: {:?}", reset_mode);
