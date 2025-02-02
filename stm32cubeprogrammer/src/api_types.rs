@@ -360,18 +360,16 @@ pub mod fus {
             if let Some(r#type) = self.r#type {
                 // Compare the type as well
                 if let Some(other_type) = other.r#type {
-                    return self.major == other.major
+                    self.major == other.major
                         && self.minor == other.minor
                         && self.sub == other.sub
-                        && r#type == other_type;
+                        && r#type == other_type
                 } else {
-                    return false;
+                    false
                 }
             } else {
                 // Do not compare the type
-                return self.major == other.major
-                    && self.minor == other.minor
-                    && self.sub == other.sub;
+                self.major == other.major && self.minor == other.minor && self.sub == other.sub
             }
         }
     }
@@ -379,9 +377,9 @@ pub mod fus {
     impl std::fmt::Display for Version {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             if let Some(r#type) = self.r#type {
-                return write!(f, "{}.{}.{}.{}", self.major, self.minor, self.sub, r#type);
+                write!(f, "{}.{}.{}.{}", self.major, self.minor, self.sub, r#type)
             } else {
-                return write!(f, "{}.{}.{}", self.major, self.minor, self.sub);
+                write!(f, "{}.{}.{}", self.major, self.minor, self.sub)
             }
         }
     }
