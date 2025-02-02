@@ -105,3 +105,9 @@ pub(crate) fn string_to_cstring(s: &str) -> CubeProgrammerResult<CString> {
         source: TypeConversionError::NullError,
     })
 }
+
+/// Check if the target supports the FUS
+pub(crate) fn target_supports_fus(target_name: &str) -> bool {
+    // TODO: Add support for wb1x
+    target_name.eq("STM32WB5x") || target_name.eq("STM32WB5x/35xx")
+}

@@ -25,6 +25,8 @@ validations = ["ihex"]
 # Feature to enable tests which require external hardware (probe + target)
 hardware_tests = []
 
+serde = ["dep:serde"]
+
 [dependencies]
 stm32cubeprogrammer-sys = { path = "../stm32cubeprogrammer-sys" }
 derive_more = { version = "1", features = [
@@ -42,6 +44,7 @@ bytemuck = { version = "1.20.0" }
 strum = { version = "0.26.3", features = ["derive"] }
 lazy_static = "1.5.0"
 bon = "3.2.0"
+serde = { version = "1", optional = true, features = ["derive"] }
 
 ihex = { optional = true, version = "3.0" }
 

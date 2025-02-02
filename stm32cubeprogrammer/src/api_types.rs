@@ -2,8 +2,13 @@ use crate::error::{CubeProgrammerError, CubeProgrammerResult};
 use derive_more::derive::{AsRef, Deref, Display, From, Into};
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// Error codes returned by the CubeProgrammer API
 #[derive(Debug, Copy, Clone, strum::Display, IntoPrimitive, FromPrimitive)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[repr(i32)]
 pub enum ErrorCode {
     #[num_enum(catch_all)]
@@ -31,7 +36,7 @@ pub enum ErrorCode {
 /// Return code which is mapped to an error if it is not equal to SUCCESS
 /// Sometimes success is 0, sometimes it is 1
 #[derive(Debug, From, Into)]
-pub(crate) struct ReturnCode<const SUCCESS: i32>(pub i32);
+pub(crate) struct ReturnCode<const SUCCESS: i32>(pub(crate) i32);
 
 impl<const SUCCESS: i32> ReturnCode<SUCCESS> {
     pub(crate) fn check(&self, action: crate::error::Action) -> CubeProgrammerResult<()> {
@@ -52,6 +57,8 @@ pub mod probe {
     #[derive(
         Debug, Default, Clone, Copy, PartialEq, IntoPrimitive, TryFromPrimitive, strum::Display,
     )]
+    #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+    #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
     #[cfg_attr(windows, repr(i32))]
     #[cfg_attr(unix, repr(u32))]
     /// Debug protocol for the target connection
@@ -64,6 +71,8 @@ pub mod probe {
     #[derive(
         Debug, Default, Clone, Copy, PartialEq, IntoPrimitive, TryFromPrimitive, strum::Display,
     )]
+    #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+    #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
     #[cfg_attr(windows, repr(i32))]
     #[cfg_attr(unix, repr(u32))]
     /// Reset mode for the target connection
@@ -77,6 +86,8 @@ pub mod probe {
     #[derive(
         Debug, Default, Clone, Copy, PartialEq, IntoPrimitive, TryFromPrimitive, strum::Display,
     )]
+    #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+    #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
     #[cfg_attr(windows, repr(i32))]
     #[cfg_attr(unix, repr(u32))]
     /// Connection mode for the target connection
@@ -91,6 +102,8 @@ pub mod probe {
 
     /// Frequency for the target connection
     #[derive(Debug, Default, Clone, PartialEq)]
+    #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+    #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
     pub enum Frequency {
         Low,
         Medium,
@@ -102,6 +115,8 @@ pub mod probe {
     }
 
     #[derive(Debug, Clone, PartialEq)]
+    #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+    #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
     /// Connection parameters for the target connection
     pub struct ConnectionParameters {
         pub frequency: Frequency,
@@ -120,6 +135,8 @@ pub mod probe {
     }
 
     #[derive(Debug, Clone, Deref, From, AsRef, Into, Hash, PartialEq, Eq, Display)]
+    #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+    #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
     /// The serial of a probe
     pub struct Serial(String);
 
@@ -247,80 +264,79 @@ pub mod probe {
 }
 
 #[derive(Debug, Clone)]
-/// General information about the target. This is read from the target after a successful connection
-pub struct TargetInformation(pub(crate) stm32cubeprogrammer_sys::generalInf);
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+/// Information about the target device
+pub struct GeneralInformation {
+    pub device_id: u32,
+    pub flash_size: u32,
+    pub bootloader_version: u32,
+    pub device_type: String,
+    pub cpu: String,
+    pub name: String,
+    pub series: String,
+    pub description: String,
+    pub revision_id: String,
+    pub probe_board: String,
+    pub fus_support: bool,
+}
 
-impl TargetInformation {
-    pub fn device_id(&self) -> u32 {
-        self.0.deviceId as u32
-    }
-
-    pub fn flash_size(&self) -> u32 {
-        self.0.flashSize as u32
-    }
-
-    pub fn bootloader_version(&self) -> u32 {
-        self.0.bootloaderVersion as u32
-    }
-
-    pub fn device_type(&self) -> &str {
-        crate::utility::c_char_slice_to_string(self.0.type_.as_ref())
+impl From<stm32cubeprogrammer_sys::generalInf> for GeneralInformation {
+    fn from(value: stm32cubeprogrammer_sys::generalInf) -> Self {
+        let name = crate::utility::c_char_slice_to_string(value.name.as_ref())
             .unwrap_or("Unknown")
             .trim_matches('\0')
-    }
+            .to_string();
 
-    pub fn cpu(&self) -> &str {
-        crate::utility::c_char_slice_to_string(self.0.cpu.as_ref())
-            .unwrap_or("Unknown")
-            .trim_matches('\0')
-    }
-
-    pub fn name(&self) -> &str {
-        crate::utility::c_char_slice_to_string(self.0.name.as_ref())
-            .unwrap_or("Unknown")
-            .trim_matches('\0')
-    }
-
-    pub fn series(&self) -> &str {
-        crate::utility::c_char_slice_to_string(self.0.series.as_ref())
-            .unwrap_or("Unknown")
-            .trim_matches('\0')
-    }
-
-    pub fn description(&self) -> &str {
-        crate::utility::c_char_slice_to_string(self.0.description.as_ref())
-            .unwrap_or("Unknown")
-            .trim_matches('\0')
-    }
-
-    pub fn revision_id(&self) -> &str {
-        crate::utility::c_char_slice_to_string(self.0.revisionId.as_ref())
-            .unwrap_or("Unknown")
-            .trim_matches('\0')
-    }
-
-    pub fn board(&self) -> &str {
-        crate::utility::c_char_slice_to_string(self.0.board.as_ref())
-            .unwrap_or("Unknown")
-            .trim_matches('\0')
+        GeneralInformation {
+            device_id: value.deviceId as u32,
+            flash_size: value.flashSize as u32,
+            bootloader_version: value.bootloaderVersion as u32,
+            device_type: crate::utility::c_char_slice_to_string(value.type_.as_ref())
+                .unwrap_or("Unknown")
+                .trim_matches('\0')
+                .to_string(),
+            cpu: crate::utility::c_char_slice_to_string(value.cpu.as_ref())
+                .unwrap_or("Unknown")
+                .trim_matches('\0')
+                .to_string(),
+            name: name.clone(),
+            series: crate::utility::c_char_slice_to_string(value.series.as_ref())
+                .unwrap_or("Unknown")
+                .trim_matches('\0')
+                .to_string(),
+            description: crate::utility::c_char_slice_to_string(value.description.as_ref())
+                .unwrap_or("Unknown")
+                .trim_matches('\0')
+                .to_string(),
+            revision_id: crate::utility::c_char_slice_to_string(value.revisionId.as_ref())
+                .unwrap_or("Unknown")
+                .trim_matches('\0')
+                .to_string(),
+            probe_board: crate::utility::c_char_slice_to_string(value.board.as_ref())
+                .unwrap_or("Unknown")
+                .trim_matches('\0')
+                .to_string(),
+            fus_support: crate::utility::target_supports_fus(&name),
+        }
     }
 }
 
-impl std::fmt::Display for TargetInformation {
+impl std::fmt::Display for GeneralInformation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "Target information (Device ID: {}, Flash size: {}, Bootloader version: {}, Device type: {}, CPU: {}, Name: {}, Series: {}, Description: {}, Revision ID: {}, Board: {})",
-            self.device_id(),
-            self.flash_size(),
-            self.bootloader_version(),
-            self.device_type(),
-            self.cpu(),
-            self.name(),
-            self.series(),
-            self.description(),
-            self.revision_id(),
-            self.board()
+            self.device_id,
+            self.flash_size,
+            self.bootloader_version,
+            self.device_type,
+            self.cpu,
+            self.name,
+            self.series,
+            self.description,
+            self.revision_id,
+            self.probe_board
         )
     }
 }
@@ -328,22 +344,45 @@ impl std::fmt::Display for TargetInformation {
 pub mod fus {
     use super::*;
 
-    #[derive(Copy, Clone, Debug, PartialEq, Default)]
+    #[derive(Copy, Clone, Debug, Default)]
+    #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+    #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
     /// Version of the FUS
     pub struct Version {
         pub major: u8,
         pub minor: u8,
         pub sub: u8,
-        pub r#type: u8,
+        pub r#type: Option<u8>,
+    }
+
+    impl PartialEq for Version {
+        fn eq(&self, other: &Self) -> bool {
+            if let Some(r#type) = self.r#type {
+                // Compare the type as well
+                if let Some(other_type) = other.r#type {
+                    return self.major == other.major
+                        && self.minor == other.minor
+                        && self.sub == other.sub
+                        && r#type == other_type;
+                } else {
+                    return false;
+                }
+            } else {
+                // Do not compare the type
+                return self.major == other.major
+                    && self.minor == other.minor
+                    && self.sub == other.sub;
+            }
+        }
     }
 
     impl std::fmt::Display for Version {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(
-                f,
-                "{}.{}.{}.{}",
-                self.major, self.minor, self.sub, self.r#type
-            )
+            if let Some(r#type) = self.r#type {
+                return write!(f, "{}.{}.{}.{}", self.major, self.minor, self.sub, r#type);
+            } else {
+                return write!(f, "{}.{}.{}", self.major, self.minor, self.sub);
+            }
         }
     }
 
@@ -362,7 +401,7 @@ pub mod fus {
                         major: converted[0],
                         minor: converted[1],
                         sub: converted[2],
-                        r#type: 0,
+                        r#type: None,
                     });
                 }
             } else if parts.clone().count() == 4 {
@@ -374,7 +413,7 @@ pub mod fus {
                         major: converted[0],
                         minor: converted[1],
                         sub: converted[2],
-                        r#type: converted[3],
+                        r#type: Some(converted[3]),
                     });
                 }
             }
@@ -387,6 +426,8 @@ pub mod fus {
     }
 
     #[derive(Copy, Clone, Debug, Default)]
+    #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+    #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
     /// Information about the FUS. This is read from the target after a successful connection to the FUS
     pub struct Information {
         pub wireless_stack_version: Version,

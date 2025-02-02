@@ -40,7 +40,7 @@ pub struct ConnectedProgrammer<'a> {
     /// Connected probe. The probe is taken from the probe registry and reinserted after the connection is closed
     probe: crate::probe::Probe,
     /// General information about the connected target which is retrieved after the connection is established
-    general_information: api_types::TargetInformation,
+    general_information: api_types::GeneralInformation,
 }
 
 /// Programmer connected to the target FUS (firmware update service) which is created via calling [`CubeProgrammer::connect_to_target_fus`]
@@ -221,7 +221,7 @@ impl CubeProgrammer {
 
                         // We could connect and get the general information
                         let general_information =
-                            api_types::TargetInformation(unsafe { *general_information });
+                            api_types::GeneralInformation::from(unsafe { *general_information });
 
                         Ok(ConnectedProgrammer {
                             programmer: self,
@@ -371,14 +371,8 @@ impl ConnectedProgrammer<'_> {
     }
 
     /// Get general device information
-    pub fn target_information(&self) -> &api_types::TargetInformation {
+    pub fn general_information(&self) -> &api_types::GeneralInformation {
         &self.general_information
-    }
-
-    /// Check if the connected target supports the firmware update service (FUS)
-    pub fn fus_support(&self) -> bool {
-        // TODO: Add support for wb1x
-        self.general_information.name().eq("STM32WB5x/35xx")
     }
 
     fn api(&self) -> &stm32cubeprogrammer_sys::CubeProgrammer_API {
@@ -386,12 +380,12 @@ impl ConnectedProgrammer<'_> {
     }
 
     fn check_fus_support(&self) -> CubeProgrammerResult<()> {
-        if !self.fus_support() {
+        if !self.general_information.fus_support {
             return Err(CubeProgrammerError::ActionNotSupported {
                 action: crate::error::Action::StartFus,
                 message: format!(
                     "Connection target {} does not support FUS",
-                    self.general_information.name()
+                    self.general_information.name
                 ),
             });
         }
@@ -416,7 +410,9 @@ impl ConnectedProgrammer<'_> {
                 major: ((version & INFO_VERSION_MAJOR_MASK) >> INFO_VERSION_MAJOR_OFFSET) as u8,
                 minor: ((version & INFO_VERSION_MINOR_MASK) >> INFO_VERSION_MINOR_OFFSET) as u8,
                 sub: ((version & INFO_VERSION_SUB_MASK) >> INFO_VERSION_SUB_OFFSET) as u8,
-                r#type: ((version & INFO_VERSION_TYPE_MASK) >> INFO_VERSION_TYPE_OFFSET) as u8,
+                r#type: Some(
+                    ((version & INFO_VERSION_TYPE_MASK) >> INFO_VERSION_TYPE_OFFSET) as u8,
+                ),
             }
         }
 
@@ -677,10 +673,6 @@ impl ConnectedProgrammer<'_> {
                 })?;
 
         let pod_data = pod_data.to_vec();
-
-        unsafe {
-            self.api().freeLibraryMemory(data as *mut std::ffi::c_void);
-        }
 
         if pod_data.len() != count {
             return Err(CubeProgrammerError::ActionOutputUnexpected {

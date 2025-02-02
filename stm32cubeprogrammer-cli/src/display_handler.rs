@@ -39,7 +39,7 @@ impl DisplayHandler {
     }
 
     pub fn set_finish(&self) {
-        self.progress_bar.finish();
+        self.progress_bar.finish_and_clear();
     }
 }
 
