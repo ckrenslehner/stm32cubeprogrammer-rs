@@ -30,6 +30,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo fmt -- --check
 
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo doc --no-deps --verbose
+
   test_and_build:
     strategy:
       matrix:
