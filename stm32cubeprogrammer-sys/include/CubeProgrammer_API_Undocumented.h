@@ -25,7 +25,7 @@ extern "C"
  * \param data     : The data to write.
  * \return 0 if the writing operation correctly finished, otherwise an error occurred.
  */
-int writeCoreRegister(unsigned int reg, unsigned int data);
+int writeCortexRegistres(unsigned int reg, unsigned int data);
 
 /**
  * \brief Read a core register.
@@ -33,7 +33,7 @@ int writeCoreRegister(unsigned int reg, unsigned int data);
  * \param data     : The data read.
  * \return 0 if the reading operation correctly finished, otherwise an error occurred.
  */
-int readCoreRegister(unsigned int reg, unsigned int *data);
+int readCortexReg(unsigned int reg, unsigned int *data);
 
 #ifdef __cplusplus
 }

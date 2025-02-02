@@ -1240,14 +1240,14 @@ pub struct CubeProgrammer_API {
         ) -> ::std::os::raw::c_int,
         ::libloading::Error,
     >,
-    pub writeCoreRegister: Result<
+    pub writeCortexRegistres: Result<
         unsafe extern "C" fn(
             reg: ::std::os::raw::c_uint,
             data: ::std::os::raw::c_uint,
         ) -> ::std::os::raw::c_int,
         ::libloading::Error,
     >,
-    pub readCoreRegister: Result<
+    pub readCortexReg: Result<
         unsafe extern "C" fn(
             reg: ::std::os::raw::c_uint,
             data: *mut ::std::os::raw::c_uint,
@@ -1345,8 +1345,8 @@ impl CubeProgrammer_API {
         let getHsmVersion = __library.get(b"getHsmVersion\0").map(|sym| *sym);
         let getHsmType = __library.get(b"getHsmType\0").map(|sym| *sym);
         let getHsmLicense = __library.get(b"getHsmLicense\0").map(|sym| *sym);
-        let writeCoreRegister = __library.get(b"writeCoreRegister\0").map(|sym| *sym);
-        let readCoreRegister = __library.get(b"readCoreRegister\0").map(|sym| *sym);
+        let writeCortexRegistres = __library.get(b"writeCortexRegistres\0").map(|sym| *sym);
+        let readCortexReg = __library.get(b"readCortexReg\0").map(|sym| *sym);
         Ok(CubeProgrammer_API {
             __library,
             __va_start,
@@ -1420,8 +1420,8 @@ impl CubeProgrammer_API {
             getHsmVersion,
             getHsmType,
             getHsmLicense,
-            writeCoreRegister,
-            readCoreRegister,
+            writeCortexRegistres,
+            readCortexReg,
         })
     }
     pub unsafe fn __security_init_cookie(&self) {
@@ -2093,24 +2093,24 @@ impl CubeProgrammer_API {
             .expect("Expected function, got error."))(hsmSlotId, outLicensePath)
     }
     #[doc = " \\brief Write a core register.\n \\param reg : The register to write.\n \\param data     : The data to write.\n \\return 0 if the writing operation correctly finished, otherwise an error occurred."]
-    pub unsafe fn writeCoreRegister(
+    pub unsafe fn writeCortexRegistres(
         &self,
         reg: ::std::os::raw::c_uint,
         data: ::std::os::raw::c_uint,
     ) -> ::std::os::raw::c_int {
         (self
-            .writeCoreRegister
+            .writeCortexRegistres
             .as_ref()
             .expect("Expected function, got error."))(reg, data)
     }
     #[doc = " \\brief Read a core register.\n \\param reg : The register to read.\n \\param data     : The data read.\n \\return 0 if the reading operation correctly finished, otherwise an error occurred."]
-    pub unsafe fn readCoreRegister(
+    pub unsafe fn readCortexReg(
         &self,
         reg: ::std::os::raw::c_uint,
         data: *mut ::std::os::raw::c_uint,
     ) -> ::std::os::raw::c_int {
         (self
-            .readCoreRegister
+            .readCortexReg
             .as_ref()
             .expect("Expected function, got error."))(reg, data)
     }
