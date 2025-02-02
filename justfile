@@ -1,4 +1,4 @@
-# Nushell needs to be installeds
+# Nushell needs to be installed
 set shell := ["nu", "-c"]
 
 shebang := if os() == 'windows' {
@@ -23,6 +23,12 @@ sample-env-file:
     STM32_CUBE_PROGRAMMER_BLE_STACK_START_ADDRESS = "<START ADDRESS e.g. 0x080CE000>"'
 
     echo $content | save .env
+
+# Run cargo-readme to update the readme files
+update-readme:
+    cd stm32cubeprogrammer ; cargo readme | save README.md -f
+    cd stm32cubeprogrammer-cli ; cargo readme | save README.md -f
+    cd stm32cubeprogrammer-sys ; cargo readme | save README.md -f
 
 # Run all tests or a specific test with a specific verbosity
 # The log level maps to the `log` crate log levels: trace, debug, info, warn, error

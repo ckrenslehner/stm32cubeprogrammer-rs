@@ -11,8 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: extractions/setup-just@v2
+      - uses: hustcer/setup-nu@v3
       - run: cargo install cargo-readme
       - run: cargo-readme --help
+      - run: just -l
       
 # jobs:
 #   spelling:
