@@ -1,11 +1,14 @@
-bindgen_header := "include/CubeProgrammer_API.h"
+bindgen_header := "include/wrapper.h"
 
-bindgen_output := if os() == 'windows' {
-  "src/bindings_windows.rs"
-} else {
-  "src/bindings_unix.rs"
-}
+bindings_windows := "src/bindings_windows.rs"
+target_windows := "x86_64-pc-windows-msvc"
+
+bindings_linux := "src/bindings_linux.rs"
+target_linux := "x86_64-unknown-linux-gnu"
+
 
 # Generate bindings for the CubeProgrammer API dynamic library
+# Both the `x86_64-pc-windows-msvc` and `x86_64-unknown-linux-gnu` targets are need to be installed to run this command
 generate-bindings:
-    bindgen {{source_directory()}}/{{bindgen_header}} --dynamic-loading CubeProgrammer_API --output {{source_directory()}}/{{bindgen_output}} -- -x c++
+    bindgen {{source_directory()}}/{{bindgen_header}} --dynamic-loading CubeProgrammer_API --output {{source_directory()}}/{{bindings_windows}} -- -x c++ -target {{target_windows}}
+    bindgen {{source_directory()}}/{{bindgen_header}} --dynamic-loading CubeProgrammer_API --output {{source_directory()}}/{{bindings_linux}} -- -x c++ -target {{target_linux}}

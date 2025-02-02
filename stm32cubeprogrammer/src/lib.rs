@@ -4,7 +4,7 @@
 //! ```no_run
 //! use stm32cubeprogrammer::{
 //!     probe::{ConnectionParameters, Protocol, ResetMode},
-//!     CubeProgrammer,
+//!     CubeProgrammer, CoreRegister
 //! };
 //!
 //! // You need to supply the path to the root directory of the STM32CubeProgrammer installation
@@ -28,6 +28,11 @@
 //!     .expect("Failed to connect to target");
 //!
 //! println!("Target information: {}", connected.general_information());
+//!
+//! connected.write_core_register(CoreRegister::R0, 0x12345678).expect("Failed to write core register");
+//!
+//! let r0 = connected.read_core_register(CoreRegister::R0).expect("Failed to read core register");
+//! println!("R0: 0x{:08X}", r0);
 //!
 //! // If there are multiple connected probes with a target, you can establish multiple connections simultaneously
 //! let connected_other = programmer
@@ -56,6 +61,7 @@
 //! - Downloading files as hex or bin
 //! - Reading and writing memory
 //!     - Uses the [`bytemuck::Pod`](https://docs.rs/bytemuck/1.21.0/bytemuck/trait.Pod.html) trait for reading and writing data from/to memory
+//! - Reading and writing of core registers
 //! - Resetting the target
 //! - Enabling and disabling readout protection (Level B)
 //! - Reset target
@@ -85,12 +91,11 @@
 //!
 //! # Warranty
 //! This crate is supplied as is without any warranty. Use at your own risk.
-
 pub mod api_log;
 pub use api_log::{LogMessageType, Verbosity};
 
 pub mod api_types;
-pub use api_types::{fus, probe, GeneralInformation};
+pub use api_types::{fus, probe, CoreRegister, GeneralInformation};
 
 pub mod display;
 pub use display::DisplayCallback;

@@ -725,6 +725,37 @@ impl ConnectedProgrammer<'_> {
         api_types::ReturnCode::<1>::from(unsafe { self.api().startWirelessStack() })
             .check(crate::error::Action::StartWirelessStack)
     }
+
+    /// Write [`crate::api_types::CoreRegister`]
+    pub fn write_core_register(
+        &self,
+        register: crate::api_types::CoreRegister,
+        value: u32,
+    ) -> CubeProgrammerResult<()> {
+        self.check_connection()?;
+
+        api_types::ReturnCode::<0>::from(unsafe {
+            self.api().writeCoreRegister(register.into(), value)
+        })
+        .check(crate::error::Action::WriteCoreRegister)
+    }
+
+    /// Read [`crate::api_types::CoreRegister`]
+    pub fn read_core_register(
+        &self,
+        register: crate::api_types::CoreRegister,
+    ) -> CubeProgrammerResult<u32> {
+        self.check_connection()?;
+
+        let mut value = 0;
+
+        api_types::ReturnCode::<0>::from(unsafe {
+            self.api().readCoreRegister(register.into(), &mut value)
+        })
+        .check(crate::error::Action::ReadCoreRegister)?;
+
+        Ok(value)
+    }
 }
 
 impl ConnectedFusProgrammer<'_> {

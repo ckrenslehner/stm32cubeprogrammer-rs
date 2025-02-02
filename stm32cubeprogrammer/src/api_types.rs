@@ -33,6 +33,31 @@ pub enum ErrorCode {
     UnknownError = -17,
 }
 
+/// CoreRegister of the target
+#[derive(Debug, Copy, Clone, strum::Display, IntoPrimitive, FromPrimitive)]
+#[repr(u32)]
+pub enum CoreRegister {
+    R0 = 0,
+    R1,
+    R2,
+    R3,
+    R4,
+    R5,
+    R6,
+    R7,
+    R8,
+    R9,
+    R10,
+    R11,
+    R12,
+    SP,
+    LR,
+    PC,
+
+    #[num_enum(catch_all)]
+    Unknown(u32),
+}
+
 /// Return code which is mapped to an error if it is not equal to SUCCESS
 /// Sometimes success is 0, sometimes it is 1
 #[derive(Debug, From, Into)]
