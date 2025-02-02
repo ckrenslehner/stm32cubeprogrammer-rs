@@ -1,4 +1,4 @@
-# Nushell needs to be installeds
+# Nushell needs to be installed
 set shell := ["nu", "-c"]
 
 shebang := if os() == 'windows' {
@@ -34,6 +34,12 @@ test name="" log_level="trace":
 # Generate the changelog with git-cliff
 changelog:
     git-cliff | save CHANGELOG.md --force
+
+# Run cargo-readme to update the readme files
+update-readme:
+    cd stm32cubeprogrammer ; cargo readme | save README.md -f
+    cd stm32cubeprogrammer-cli ; cargo readme | save README.md -f
+    cd stm32cubeprogrammer-sys ; cargo readme | save README.md -f
 
 # Release the project
 # TODO: Add CI and so on
