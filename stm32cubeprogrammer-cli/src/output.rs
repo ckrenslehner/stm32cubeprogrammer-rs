@@ -16,7 +16,7 @@ pub struct Output {
 impl Output {
     const SCHEMA_VERSION: &str = "1";
 
-    pub fn new(args: ArgsOs, cube_programmer_dir: &std::path::PathBuf) -> Self {
+    pub fn new(args: ArgsOs, cube_programmer_dir: &std::path::Path) -> Self {
         let schema_version = Self::SCHEMA_VERSION.to_string();
         let args = args
             .skip(1)
@@ -27,7 +27,7 @@ impl Output {
         Self {
             schema_version,
             args,
-            cube_programmer_dir: cube_programmer_dir.clone(),
+            cube_programmer_dir: cube_programmer_dir.to_path_buf(),
             connected_probes: None,
             selected_probe: None,
             general_information: None,
@@ -80,6 +80,7 @@ pub enum CommandOutput {
     UpdateBleStack {
         file: std::path::PathBuf,
         address: u32,
+        ble_stack_updated: BleStackUpdated,
     },
     #[serde(rename_all = "camelCase")]
     BleStackInfo(stm32cubeprogrammer::fus::Information),
@@ -92,16 +93,16 @@ pub enum CommandOutput {
     Unprotect,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum BleStackUpdated {
     #[serde(rename_all = "camelCase")]
-    NotUpdatet,
+    NotUpdated,
     #[serde(rename_all = "camelCase")]
     Updated(BleStackUpdateReason),
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum BleStackUpdateReason {
     #[serde(rename_all = "camelCase")]

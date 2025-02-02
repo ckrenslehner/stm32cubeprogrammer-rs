@@ -320,23 +320,24 @@ fn main_inner() -> Result<crate::output::Output, anyhow::Error> {
 
                 let fus_programmer = programmer_connection.fus_connection()?;
 
-                let flash = if let Some(stack_version) = ble_stack_info.version {
+                let flash_reason = if ble_stack_info.force {
+                    Some(output::BleStackUpdateReason::Force)
+                } else if let Some(stack_version) = ble_stack_info.version {
                     if fus_programmer.fus_info().wireless_stack_version == stack_version {
-                        log::info!("BLE stack is already up to date");
-                        false
+                        None
                     } else {
-                        log::info!(
-                            "Versions not equal. Current BLE stack version: {}",
-                            fus_programmer.fus_info().wireless_stack_version
-                        );
-                        log::info!("Updating BLE stack to version {}", stack_version);
-                        true
+                        Some(output::BleStackUpdateReason::VersionNotEqual {
+                            expected: stack_version,
+                            on_target: fus_programmer.fus_info().wireless_stack_version,
+                        })
                     }
                 } else {
-                    true
+                    Some(output::BleStackUpdateReason::NoVersionProvided)
                 };
 
-                if flash {
+                if let Some(ref flash_reason) = flash_reason {
+                    info!("Updating BLE stack: {:?}", flash_reason);
+
                     fus_programmer
                         .upgrade_wireless_stack(
                             &ble_stack_info.file,
@@ -347,6 +348,8 @@ fn main_inner() -> Result<crate::output::Output, anyhow::Error> {
                         )
                         .with_context(|| "Failed to update BLE stack")?;
                 } else {
+                    info!("BLE stack is up to date");
+
                     fus_programmer
                         .start_wireless_stack()
                         .with_context(|| "Failed to start BLE stack")?;
@@ -355,6 +358,9 @@ fn main_inner() -> Result<crate::output::Output, anyhow::Error> {
                 output::CommandOutput::UpdateBleStack {
                     file: ble_stack_info.file,
                     address: ble_stack_info.address.0,
+                    ble_stack_updated: flash_reason
+                        .map(output::BleStackUpdated::Updated)
+                        .unwrap_or(output::BleStackUpdated::NotUpdated),
                 }
             }
             parse::TargetCommand::BleStackInfo { compare } => {
