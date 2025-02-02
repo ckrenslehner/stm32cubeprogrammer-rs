@@ -7,9 +7,9 @@
 //! - Enabling read protection
 //! - Disabling read protection
 //! - Resetting target
-//! 
+//!
 //! All commands above can be combined in a single command line invocation by chaining them.
-//! 
+//!
 //! If you need other commands, feel free to open an issue or a pull request. :smile:
 //!
 //! # Example usage:
@@ -28,7 +28,7 @@
 //! ```sh
 //! STM32_CUBE_PROGRAMMER_DIR=`installation_dir` stm32cubeprogrammer-cli unprotect reset flash-hex `path_to_hex_file` protect
 //! ```
-//! 
+//!
 //! Use the `--list` flag to list available probes.
 //! ```sh
 //! stm32cubeprogrammer-cli --stm32-cube-programmer-dir `installation_dir` --list
@@ -48,6 +48,7 @@
 //! This crate is supplied as is without any warranty. Use at your own risk.
 
 mod display_handler;
+mod output;
 mod parse;
 
 use anyhow::Context;
@@ -193,13 +194,21 @@ fn init_display_handler(verbosity: log::LevelFilter) -> std::sync::Arc<Mutex<Dis
     std::sync::Arc::new(Mutex::new(DisplayHandler::new(logger)))
 }
 
-/// Main entry point of the CLI
-fn main() -> Result<(), anyhow::Error> {
+fn main_inner() -> Result<crate::output::Output, anyhow::Error> {
     // Parse command line arguments
     let options = parse::options().run();
 
+    let mut cli_output =
+        output::Output::new(std::env::args_os(), &options.stm32_cube_programmer_dir);
+
+    let verbosity = if options.quiet {
+        log::LevelFilter::Error
+    } else {
+        options.verbose
+    };
+
     // Init api
-    let display_handler = init_display_handler(options.verbosity);
+    let display_handler = init_display_handler(verbosity);
     let api = stm32cubeprogrammer::CubeProgrammer::builder()
         .cube_programmer_dir(&options.stm32_cube_programmer_dir)
         .display_callback(display_handler.clone())
@@ -211,6 +220,8 @@ fn main() -> Result<(), anyhow::Error> {
         .list_available_probes()
         .with_context(|| "Failed to list available probes")?;
 
+    cli_output.add_probe_list(&probes);
+
     // Early return if the list_probes flag is set
     if options.list_probes {
         if probes.is_empty() {
@@ -221,7 +232,7 @@ fn main() -> Result<(), anyhow::Error> {
             }
         }
 
-        return Ok(());
+        return Ok(cli_output);
     }
 
     // Select a probe
@@ -231,15 +242,22 @@ fn main() -> Result<(), anyhow::Error> {
     }
 
     let selected_probe = select_probe(&probes, &options.probe_serial)?;
+    cli_output.add_selected_probe(selected_probe);
 
     // Create a managed connection
     let mut programmer_connection =
         ProgrammerConnection::new(&api, selected_probe, options.protocol.into());
 
-    programmer_connection.connection().map_err(|x| {
-        error!("Failed to connect to target: {:?}", x);
-        x
-    })?;
+    // Connect to the target and add target information to the output
+    cli_output.add_target_information(
+        programmer_connection
+            .connection()
+            .map_err(|x| {
+                error!("Failed to connect to target: {:?}", x);
+                x
+            })?
+            .general_information(),
+    );
 
     // Check if the command list includes a fus command and if so, check if the current target even supports FUS
     // Early return if the target does not support FUS
@@ -247,7 +265,10 @@ fn main() -> Result<(), anyhow::Error> {
         .target_commands
         .iter()
         .any(|command| matches!(command, parse::TargetCommand::UpdateBleStack(_)))
-        && !programmer_connection.connection()?.fus_support()
+        && !programmer_connection
+            .connection()?
+            .general_information()
+            .fus_support
     {
         error!("The target does not support FUS commands");
         return Err(anyhow::anyhow!("The target does not support FUS commands"));
@@ -255,8 +276,10 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Handle commands
     for command in options.target_commands {
-        match command {
+        let command_output = match command {
             parse::TargetCommand::FlashBin(bin_file_info) => {
+                log::info!("Flash binary file: {}", bin_file_info);
+
                 display_handler
                     .lock()
                     .unwrap()
@@ -264,10 +287,17 @@ fn main() -> Result<(), anyhow::Error> {
 
                 programmer_connection
                     .connection()?
-                    .download_bin_file(bin_file_info.file, bin_file_info.address.0, false, true)
+                    .download_bin_file(&bin_file_info.file, bin_file_info.address.0, false, true)
                     .with_context(|| "Failed to flash binary file")?;
+
+                output::CommandOutput::FlashBin {
+                    file: bin_file_info.file,
+                    address: bin_file_info.address.0,
+                }
             }
             parse::TargetCommand::FlashHex { file } => {
+                log::info!("Flash hex file: `{:?}`", file);
+
                 display_handler
                     .lock()
                     .unwrap()
@@ -275,10 +305,14 @@ fn main() -> Result<(), anyhow::Error> {
 
                 programmer_connection
                     .connection()?
-                    .download_hex_file(file, false, true)
+                    .download_hex_file(&file, false, true)
                     .with_context(|| "Failed to flash hex file")?;
+
+                output::CommandOutput::FlashHex { file }
             }
             parse::TargetCommand::UpdateBleStack(ble_stack_info) => {
+                log::info!("Update BLE stack: {}", ble_stack_info);
+
                 display_handler
                     .lock()
                     .unwrap()
@@ -305,7 +339,7 @@ fn main() -> Result<(), anyhow::Error> {
                 if flash {
                     fus_programmer
                         .upgrade_wireless_stack(
-                            ble_stack_info.file,
+                            &ble_stack_info.file,
                             ble_stack_info.address.0,
                             false,
                             true,
@@ -317,8 +351,36 @@ fn main() -> Result<(), anyhow::Error> {
                         .start_wireless_stack()
                         .with_context(|| "Failed to start BLE stack")?;
                 }
+
+                output::CommandOutput::UpdateBleStack {
+                    file: ble_stack_info.file,
+                    address: ble_stack_info.address.0,
+                }
+            }
+            parse::TargetCommand::BleStackInfo { compare } => {
+                display_handler
+                    .lock()
+                    .unwrap()
+                    .set_message("Get BLE stack information");
+
+                let fus_programmer = programmer_connection.fus_connection()?;
+                let target_version = fus_programmer.fus_info().wireless_stack_version;
+
+                log::info!("FUS info: {}", fus_programmer.fus_info());
+
+                if let Some(compare) = compare {
+                    log::info!("Comparing BLE stack versions. Given version: {} ; Version on target: {} ; Stack up to date: {}", compare, target_version, compare == target_version);
+                }
+
+                fus_programmer
+                    .start_wireless_stack()
+                    .with_context(|| "Failed to start BLE stack")?;
+
+                output::CommandOutput::BleStackInfo(fus_programmer.fus_info().clone())
             }
             parse::TargetCommand::Reset(reset_mode) => {
+                log::info!("Resetting target: {:?}", reset_mode);
+
                 display_handler
                     .lock()
                     .unwrap()
@@ -326,10 +388,16 @@ fn main() -> Result<(), anyhow::Error> {
 
                 programmer_connection
                     .connection()?
-                    .reset_target(reset_mode.into())
+                    .reset_target(reset_mode.clone().into())
                     .with_context(|| "Failed to reset target")?;
+
+                output::CommandOutput::Reset {
+                    reset_mode: reset_mode.into(),
+                }
             }
             parse::TargetCommand::MassErase => {
+                log::info!("Mass erase");
+
                 display_handler
                     .lock()
                     .unwrap()
@@ -339,8 +407,12 @@ fn main() -> Result<(), anyhow::Error> {
                     .connection()?
                     .mass_erase()
                     .with_context(|| "Failed to mass erase target")?;
+
+                output::CommandOutput::MassErase
             }
             parse::TargetCommand::Protect => {
+                log::info!("Enable read protection");
+
                 display_handler
                     .lock()
                     .unwrap()
@@ -350,8 +422,12 @@ fn main() -> Result<(), anyhow::Error> {
                     .connection()?
                     .enable_read_out_protection()
                     .with_context(|| "Failed to enable read protection")?;
+
+                output::CommandOutput::Protect
             }
             parse::TargetCommand::Unprotect => {
+                log::info!("Disable read protection");
+
                 display_handler
                     .lock()
                     .unwrap()
@@ -361,11 +437,22 @@ fn main() -> Result<(), anyhow::Error> {
                     .connection()?
                     .disable_read_out_protection()
                     .with_context(|| "Failed to disable read protection")?;
-            }
-        }
 
+                output::CommandOutput::Unprotect
+            }
+        };
+
+        cli_output.add_command_output(command_output);
         display_handler.lock().unwrap().set_finish();
     }
+
+    Ok(cli_output)
+}
+
+/// Main entry point of the CLI
+fn main() -> Result<(), anyhow::Error> {
+    let output = main_inner()?;
+    println!("{}", serde_json::to_string_pretty(&output)?);
 
     Ok(())
 }

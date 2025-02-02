@@ -90,7 +90,7 @@ pub mod api_log;
 pub use api_log::{LogMessageType, Verbosity};
 
 pub mod api_types;
-pub use api_types::{fus, probe, TargetInformation};
+pub use api_types::{fus, probe, GeneralInformation};
 
 pub mod display;
 pub use display::DisplayCallback;
