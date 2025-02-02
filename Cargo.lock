@@ -703,7 +703,7 @@ dependencies = [
  "log",
  "num_enum",
  "serde",
- "stm32cubeprogrammer-sys",
+ "stm32cubeprogrammer-sys 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "strum",
  "test-log",
  "widestring",
@@ -728,7 +728,17 @@ dependencies = [
 
 [[package]]
 name = "stm32cubeprogrammer-sys"
-version = "0.1.0"
+version = "0.1.1"
+dependencies = [
+ "bindgen",
+ "libloading",
+]
+
+[[package]]
+name = "stm32cubeprogrammer-sys"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18e205f83931ac44c97d8ccba59fd1ce3222b9f4cd58b66f7adf2ee3f4b2daba"
 dependencies = [
  "bindgen",
  "libloading",

@@ -6,7 +6,7 @@ This crate provides a high-level rust API for the STM32CubeProgrammer DLL.
 ```rust
 use stm32cubeprogrammer::{
     probe::{ConnectionParameters, Protocol, ResetMode},
-    CubeProgrammer,
+    CubeProgrammer, CoreRegister
 };
 
 // You need to supply the path to the root directory of the STM32CubeProgrammer installation
@@ -30,6 +30,16 @@ let connected = programmer
     .expect("Failed to connect to target");
 
 println!("Target information: {}", connected.general_information());
+
+// Write and read core register R0
+let value = 0x12345678;
+connected
+    .write_core_register(CoreRegister::R0, value)
+    .expect("Failed to write core register");
+let r0 = connected
+    .read_core_register(CoreRegister::R0)
+    .expect("Failed to read core register");
+println!("R0: 0x{:08X}", r0);
 
 // If there are multiple connected probes with a target, you can establish multiple connections simultaneously
 let connected_other = programmer
@@ -58,6 +68,7 @@ More examples can be found in the `tests` directory.
 - Downloading files as hex or bin
 - Reading and writing memory
     - Uses the [`bytemuck::Pod`](https://docs.rs/bytemuck/1.21.0/bytemuck/trait.Pod.html) trait for reading and writing data from/to memory
+- Reading and writing of core registers
 - Resetting the target
 - Enabling and disabling readout protection (Level B)
 - Reset target

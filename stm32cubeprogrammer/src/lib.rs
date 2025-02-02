@@ -29,9 +29,14 @@
 //!
 //! println!("Target information: {}", connected.general_information());
 //!
-//! connected.write_core_register(CoreRegister::R0, 0x12345678).expect("Failed to write core register");
-//!
-//! let r0 = connected.read_core_register(CoreRegister::R0).expect("Failed to read core register");
+//! // Write and read core register R0
+//! let value = 0x12345678;
+//! connected
+//!     .write_core_register(CoreRegister::R0, value)
+//!     .expect("Failed to write core register");
+//! let r0 = connected
+//!     .read_core_register(CoreRegister::R0)
+//!     .expect("Failed to read core register");
 //! println!("R0: 0x{:08X}", r0);
 //!
 //! // If there are multiple connected probes with a target, you can establish multiple connections simultaneously

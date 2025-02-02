@@ -1,3 +1,8 @@
+
+[default.extend-identifiers]
+# Typo in CubeProgrammer API symbol
+writeCortexRegistres = "writeCortexRegistres"
+
 [files]
 extend-exclude = [
     "stm32cubeprogrammer-sys/include",

@@ -79,4 +79,8 @@ pub enum CubeProgrammerError {
     FileIo(std::io::Error),
 
     LibLoading(stm32cubeprogrammer_sys::libloading::Error),
+
+    MissingDllSymbol {
+        message: String,
+    },
 }

@@ -1,21 +1,32 @@
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
-
 use crate::{
     api_log, api_types, display,
     error::{CubeProgrammerError, CubeProgrammerResult},
     utility,
 };
-
 use bon::bon;
 use derive_more::Into;
 use log::{debug, error};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+use stm32cubeprogrammer_sys::libloading;
 use stm32cubeprogrammer_sys::SRAM_BASE_ADDRESS;
 
-use stm32cubeprogrammer_sys::libloading;
+macro_rules! verify_api_struct {
+    ($api:expr, $($field:ident),*) => {{
+        $(
+            match &$api.$field {
+                Ok(_) => (), // Symbol exists, continue
+                Err(err) => return Err(CubeProgrammerError::MissingDllSymbol{message: format!(
+                    "Missing symbol '{}': {}", stringify!($field), err
+                )}),
+            }
+        )*
+        Ok(())
+    }};
+}
 
 /// HashMap to store connected probes.
 /// The key is the serial number of the probe.
@@ -86,6 +97,34 @@ impl CubeProgrammer {
             stm32cubeprogrammer_sys::CubeProgrammer_API::from_library(library)
                 .map_err(CubeProgrammerError::LibLoading)?
         };
+
+        // Verify if all API functions are available before proceeding
+        verify_api_struct!(
+            api,
+            setVerbosityLevel,
+            setDisplayCallbacks,
+            setLoadersPath,
+            getStLinkList,
+            deleteInterfaceList,
+            connectStLink,
+            getDeviceGeneralInf,
+            disconnect,
+            startFus,
+            reset,
+            downloadFile,
+            massErase,
+            saveMemoryToFile,
+            sendOptionBytesCmd,
+            readUnprotect,
+            checkDeviceConnection,
+            readMemory,
+            freeLibraryMemory,
+            startWirelessStack,
+            writeCortexRegistres,
+            readCortexReg,
+            firmwareDelete,
+            firmwareUpgrade
+        )?;
 
         if let Some(display_callback) = display_callback {
             debug!("Set display callback handler");
@@ -674,6 +713,10 @@ impl ConnectedProgrammer<'_> {
 
         let pod_data = pod_data.to_vec();
 
+        unsafe {
+            self.api().freeLibraryMemory(data as *mut std::ffi::c_void);
+        }
+
         if pod_data.len() != count {
             return Err(CubeProgrammerError::ActionOutputUnexpected {
                 action: crate::error::Action::ReadMemory,
@@ -735,7 +778,7 @@ impl ConnectedProgrammer<'_> {
         self.check_connection()?;
 
         api_types::ReturnCode::<0>::from(unsafe {
-            self.api().writeCoreRegister(register.into(), value)
+            self.api().writeCortexRegistres(register.into(), value)
         })
         .check(crate::error::Action::WriteCoreRegister)
     }
@@ -750,7 +793,7 @@ impl ConnectedProgrammer<'_> {
         let mut value = 0;
 
         api_types::ReturnCode::<0>::from(unsafe {
-            self.api().readCoreRegister(register.into(), &mut value)
+            self.api().readCortexReg(register.into(), &mut value)
         })
         .check(crate::error::Action::ReadCoreRegister)?;
 

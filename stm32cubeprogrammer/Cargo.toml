@@ -28,7 +28,7 @@ hardware_tests = []
 serde = ["dep:serde"]
 
 [dependencies]
-stm32cubeprogrammer-sys = { path = "../stm32cubeprogrammer-sys" }
+stm32cubeprogrammer-sys = { version = "0.1.1" }
 derive_more = { version = "1", features = [
     "from",
     "deref",
@@ -47,6 +47,9 @@ bon = "3.2.0"
 serde = { version = "1", optional = true, features = ["derive"] }
 
 ihex = { optional = true, version = "3.0" }
+
+# # [patch.crates-io]
+# stm32cubeprogrammer-sys = { path = "../stm32cubeprogrammer-sys" }
 
 [dev-dependencies]
 dotenvy.workspace = true
