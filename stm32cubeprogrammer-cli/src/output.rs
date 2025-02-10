@@ -4,13 +4,13 @@ use std::env::ArgsOs;
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Output {
-    schema_version: String,
-    args: String,
-    cube_programmer_dir: std::path::PathBuf,
-    connected_probes: Option<Vec<stm32cubeprogrammer::probe::Serial>>,
-    selected_probe: Option<stm32cubeprogrammer::probe::Serial>,
-    general_information: Option<stm32cubeprogrammer::api_types::GeneralInformation>,
-    command_output: Option<Vec<CommandOutput>>,
+    pub schema_version: String,
+    pub args: String,
+    pub cube_programmer_dir: std::path::PathBuf,
+    pub connected_probes: Option<Vec<stm32cubeprogrammer::probe::Serial>>,
+    pub selected_probe: Option<stm32cubeprogrammer::probe::Serial>,
+    pub general_information: Option<stm32cubeprogrammer::api_types::GeneralInformation>,
+    pub command_output: Option<Vec<CommandOutput>>,
 }
 
 impl Output {

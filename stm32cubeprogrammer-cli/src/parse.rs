@@ -2,7 +2,7 @@ use bpaf::*;
 use stm32cubeprogrammer::utility::HexAddress;
 
 #[derive(Debug, Clone, Bpaf)]
-#[bpaf(options)]
+#[bpaf(options, version)]
 /// Overall arguments for CLI
 /// Note: Be careful with duplicate short or long flag names in the subcommands and the parent struct
 pub struct Options {
@@ -58,11 +58,11 @@ pub enum TargetCommand {
 
     #[bpaf(command, adjacent)]
     /// Update the BLE stack on the target
-    UpdateBleStack(#[bpaf(external(ble_stack_info))] BleStackInfo),
+    BleUpdate(#[bpaf(external(ble_stack_info))] BleStackInfo),
 
-    /// Read BLE stack information
+    /// Read BLE stack information from the target and optionally compare the target version with a given version
     #[bpaf(command, adjacent)]
-    BleStackInfo {
+    BleInfo {
         #[bpaf(long, fallback(None))]
         /// The flash address in format 0x123 or 0X123 where file should be written
         compare: Option<stm32cubeprogrammer::fus::Version>,
@@ -235,24 +235,13 @@ mod test {
 
     #[test]
     fn parse_multi() {
+        std::env::set_var("STM32_CUBE_PROGRAMMER_DIR", "some/dir");
+
+        let command =
+            "unprotect ble-update --file stack.bin --address 0x123 flash-bin --file app.bin --address 0x456 protect reset";
+
         let value = options()
-            .run_inner(&[
-                "--stm32-cube-programmer-dir",
-                "some/dir",
-                "unprotect",
-                "update-ble-stack",
-                "--file",
-                "stack.bin",
-                "--address",
-                "0x123",
-                "flash-bin",
-                "--file",
-                "app.bin",
-                "--address",
-                "0x456",
-                "protect",
-                "reset",
-            ])
+            .run_inner(command.split(' ').collect::<Vec<_>>().as_slice())
             .unwrap();
 
         println!("{:?}", value);
@@ -261,7 +250,7 @@ mod test {
             value.target_commands,
             vec![
                 TargetCommand::Unprotect,
-                TargetCommand::UpdateBleStack(BleStackInfo {
+                TargetCommand::BleUpdate(BleStackInfo {
                     file: std::path::PathBuf::from("stack.bin"),
                     address: HexAddress(0x123),
                     version: None,

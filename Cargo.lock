@@ -710,6 +710,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "stm32cubeprogrammer"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca6d7ae590bdbe58768a94a277e197b254226cef83ccdd8100329ef23080cd89"
+dependencies = [
+ "bon",
+ "bytemuck",
+ "derive_more",
+ "ihex",
+ "lazy_static",
+ "log",
+ "num_enum",
+ "serde",
+ "stm32cubeprogrammer-sys 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "strum",
+ "widestring",
+]
+
+[[package]]
 name = "stm32cubeprogrammer-cli"
 version = "0.1.0"
 dependencies = [
@@ -722,7 +741,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
- "stm32cubeprogrammer",
+ "stm32cubeprogrammer 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "test-log",
 ]
 
