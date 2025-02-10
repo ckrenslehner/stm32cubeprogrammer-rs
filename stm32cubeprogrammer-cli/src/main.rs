@@ -1,3 +1,37 @@
+// TODO: Add doctest for commands from readme
+// const CLI_COMMAND: &str = "unprotect ble-update --file stack.bin --address 0x123 flash-bin --file app.bin --address 0x456 protect reset";
+
+// // Include the command in the docstring dynamically
+// #[doc = concat!(
+//     "Example usage of the CLI.\n\n",
+//     "```sh\n",
+//     "my_cli_tool ", CLI_COMMAND, "\n",
+//     "```\n\n",
+//     "(The following test is hidden from the documentation.)"
+// )]
+// ///
+// /// ```
+// /// # use my_crate::{options, TargetCommand, BleStackInfo, BinFileInfo, HexAddress, ResetMode};
+// /// # use std::path::PathBuf;
+// /// # std::env::set_var("STM32_CUBE_PROGRAMMER_DIR", "some/dir");
+// ///
+// /// // Use the same command string in the test
+// /// let command = CLI_COMMAND;
+// ///
+// /// // Run the CLI parsing logic
+// /// let value = options()
+// ///     .run_inner(command.split(' ').collect::<Vec<_>>().as_slice())
+// ///     .unwrap();
+// /// ```
+// #[derive(Default)]
+// /// Track the connection state of the programmer
+// enum ConnectionState<'a> {
+//     #[default]
+//     Disconnected,
+//     Connected(Option<stm32cubeprogrammer::ConnectedProgrammer<'a>>),
+//     ConnectedFus(Option<stm32cubeprogrammer::ConnectedFusProgrammer<'a>>),
+// }
+
 //! This CLI aims to provide a simple interface for setting up stm32 targets.
 //! # Supported commands
 //! - Flashing bin and hex files
@@ -57,14 +91,8 @@ use log::{error, info};
 use std::sync::Mutex;
 use stm32cubeprogrammer::probe;
 
-#[derive(Default)]
-/// Track the connection state of the programmer
-enum ConnectionState<'a> {
-    #[default]
-    Disconnected,
-    Connected(Option<stm32cubeprogrammer::ConnectedProgrammer<'a>>),
-    ConnectedFus(Option<stm32cubeprogrammer::ConnectedFusProgrammer<'a>>),
-}
+
+
 
 /// Helper struct to manage the programmer connection
 struct ProgrammerConnection<'a> {
@@ -264,7 +292,7 @@ fn main_inner() -> Result<crate::output::Output, anyhow::Error> {
     if options
         .target_commands
         .iter()
-        .any(|command| matches!(command, parse::TargetCommand::UpdateBleStack(_)))
+        .any(|command| matches!(command, parse::TargetCommand::BleUpdate(_)))
         && !programmer_connection
             .connection()?
             .general_information()
@@ -310,7 +338,7 @@ fn main_inner() -> Result<crate::output::Output, anyhow::Error> {
 
                 output::CommandOutput::FlashHex { file }
             }
-            parse::TargetCommand::UpdateBleStack(ble_stack_info) => {
+            parse::TargetCommand::BleUpdate(ble_stack_info) => {
                 log::info!("Update BLE stack: {}", ble_stack_info);
 
                 display_handler
@@ -363,7 +391,7 @@ fn main_inner() -> Result<crate::output::Output, anyhow::Error> {
                         .unwrap_or(output::BleStackUpdated::NotUpdated),
                 }
             }
-            parse::TargetCommand::BleStackInfo { compare } => {
+            parse::TargetCommand::BleInfo { compare } => {
                 display_handler
                     .lock()
                     .unwrap()
